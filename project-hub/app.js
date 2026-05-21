@@ -21,7 +21,6 @@ function getStoredToken() {
 function storeToken(token) { localStorage.setItem(TOKEN_KEY, token); }
 function clearToken()      { localStorage.removeItem(TOKEN_KEY); }
 
-// Each call gets its own unique storageKey so GoTrueClient never sees a duplicate
 function buildSupabase(token) {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
@@ -34,8 +33,8 @@ function buildSupabase(token) {
   });
 }
 
-let supabase = null;
-let initialized = false;
+let supabase     = null;
+let initialized  = false;
 
 /* ── Gate UI refs ─────────────────────────────────────────── */
 const authGate      = document.getElementById('auth-gate');
@@ -73,7 +72,9 @@ async function attemptLogin(passphrase) {
     storeToken(json.token);
     supabase = buildSupabase(json.token);
     showApp();
-    init();
+    // Always wire up listeners once, then always (re)load data
+    setupApp();
+    await loadProjects();
   } catch (err) {
     authGateError.textContent = err.message;
     authGateError.hidden      = false;
@@ -88,8 +89,8 @@ authGateForm.addEventListener('submit', e => { e.preventDefault(); attemptLogin(
 authSignout.addEventListener('click', () => {
   clearToken();
   unsubscribeRealtime();
-  initialized = false;
-  supabase = null;
+  initialized = false;   // allow re-wiring listeners on next login
+  supabase    = null;
   showGate();
 });
 
@@ -170,8 +171,8 @@ const cardPayload         = $('card-payload');
 const payloadToggle       = $('payload-toggle');
 const TIMELINE_PADDING    = 40;
 
-/* ── App functions ────────────────────────────────────────── */
-function init() {
+/* ── One-time listener setup ─────────────────────────────────── */
+function setupApp() {
   if (initialized) return;
   initialized = true;
   setupFilters();
@@ -179,9 +180,9 @@ function init() {
   setupAnnotationForm();
   setupEditForm();
   setupDeleteDialog();
-  loadProjects();
 }
 
+/* ── Data loading ───────────────────────────────────────────── */
 async function loadProjects() {
   projectTitle.textContent = 'Loading…';
   const { data, error } = await supabase
@@ -644,12 +645,13 @@ function formatTime(iso) {
 function capitalise(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-/* ── Boot (must be last — after all const declarations) ───── */
+/* ── Boot ─────────────────────────────────────────────────── */
 const _bootToken = getStoredToken();
 if (_bootToken) {
   supabase = buildSupabase(_bootToken);
   showApp();
-  init();
+  setupApp();
+  loadProjects();
 } else {
   showGate();
 }
