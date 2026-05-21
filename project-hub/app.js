@@ -23,79 +23,53 @@ const state = {
   visibleEvents: [],
   selectedIndex: null,
   realtimeChannel: null,
-  annotationSourceId: null,
-  pendingInsertedAnnotationId: null,
   editingEventId: null,
   pendingDeleteId: null,
   filters: {
-    kinds:    new Set(['milestone','update','decision','launch','blocker']),
-    sources:  new Set(['automatic','manual']),
-    contexts: new Set(['production','development','test']),
+    kinds: new Set(['milestone','update','decision','launch','blocker']),
   },
 };
 
 /* ── DOM refs ──────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
-const projectSelect       = $('project-select');
-const projectTitle        = $('project-title');
-const projectStatus       = $('project-status');
-const timelineTrack       = $('timeline-track');
-const timelineAxis        = $('timeline-axis');
-const timelineEmpty       = $('timeline-empty');
-const realtimeBadge       = $('realtime-badge');
-const detailEmpty         = $('detail-empty');
-const detailCard          = $('detail-card');
-const navPrev             = $('nav-prev');
-const navNext             = $('nav-next');
-const eventNavSelect      = $('event-nav-select');
-const cardKind            = $('card-kind');
-const cardSourceBadge     = $('card-source-badge');
-const cardContextBadge    = $('card-context-badge');
-const cardTime            = $('card-time');
-const cardSummary         = $('card-summary');
-const cardMeta            = $('card-meta');
-const cardBody            = $('card-body');
-const cardActions         = $('card-actions');
-const annotationDrawer    = $('annotation-drawer');
-const annotationLinked    = $('annotation-linked');
-const annotationForm      = $('annotation-form');
-const annotationKind      = $('annotation-kind');
-const annotationContext   = $('annotation-context');
-const annotationAuthor    = $('annotation-author');
-const annotationSummary   = $('annotation-summary');
-const annotationNarrative = $('annotation-narrative');
-const annotationSubmit    = $('annotation-submit');
-const annotationCancel    = $('annotation-cancel');
-const annotationReset     = $('annotation-reset');
-const annotationStatus    = $('annotation-status');
-const linkedPanel         = $('linked-annotations');
-const linkedList          = $('linked-annotations-list');
-const linkedCount         = $('linked-annotations-count');
-const editDrawer          = $('edit-drawer');
-const editForm            = $('edit-form');
-const editKind            = $('edit-kind');
-const editContext         = $('edit-context');
-const editAuthor          = $('edit-author');
-const editSummary         = $('edit-summary');
-const editNarrative       = $('edit-narrative');
-const editSubmit          = $('edit-submit');
-const editCancel          = $('edit-cancel');
-const editDelete          = $('edit-delete');
-const editStatus          = $('edit-status');
-const deleteDialog        = $('delete-dialog');
-const deleteDialogDesc    = $('delete-dialog-desc');
-const deleteCancel        = $('delete-cancel');
-const deleteConfirm       = $('delete-confirm');
-const deleteStatus        = $('delete-status');
-const cardPayloadWrap     = $('card-payload-wrapper');
-const cardPayload         = $('card-payload');
-const payloadToggle       = $('payload-toggle');
-const TIMELINE_PADDING    = 40;
+const projectSelect    = $('project-select');
+const projectTitle     = $('project-title');
+const projectStatus    = $('project-status');
+const timelineTrack    = $('timeline-track');
+const timelineAxis     = $('timeline-axis');
+const timelineEmpty    = $('timeline-empty');
+const realtimeBadge    = $('realtime-badge');
+const detailEmpty      = $('detail-empty');
+const detailCard       = $('detail-card');
+const navPrev          = $('nav-prev');
+const navNext          = $('nav-next');
+const eventNavSelect   = $('event-nav-select');
+const cardKind         = $('card-kind');
+const cardTime         = $('card-time');
+const cardSummary      = $('card-summary');
+const cardMeta         = $('card-meta');
+const cardBody         = $('card-body');
+const cardActions      = $('card-actions');
+const editDrawer       = $('edit-drawer');
+const editForm         = $('edit-form');
+const editKind         = $('edit-kind');
+const editAuthor       = $('edit-author');
+const editSummary      = $('edit-summary');
+const editNarrative    = $('edit-narrative');
+const editSubmit       = $('edit-submit');
+const editCancel       = $('edit-cancel');
+const editDelete       = $('edit-delete');
+const editStatus       = $('edit-status');
+const deleteDialog     = $('delete-dialog');
+const deleteDialogDesc = $('delete-dialog-desc');
+const deleteCancel     = $('delete-cancel');
+const deleteConfirm    = $('delete-confirm');
+const deleteStatus     = $('delete-status');
+const TIMELINE_PADDING = 40;
 
 /* ── Boot ─────────────────────────────────────────────────── */
 setupFilters();
 setupNavListeners();
-setupAnnotationForm();
 setupEditForm();
 setupDeleteDialog();
 loadProjects();
@@ -137,7 +111,7 @@ function populateProjectSelect() {
 projectSelect.addEventListener('change', async () => {
   state.activeProjectId = projectSelect.value;
   state.selectedIndex   = null;
-  closeAllDrawers();
+  closeEditDrawer();
   unsubscribeRealtime();
   await loadEvents();
 });
@@ -145,7 +119,7 @@ projectSelect.addEventListener('change', async () => {
 async function loadEvents() {
   const project = state.projects.find(p => p.id === state.activeProjectId);
   if (project) {
-    projectTitle.textContent = project.title;
+    projectTitle.textContent  = project.title;
     projectStatus.textContent = project.status ?? '';
   }
   renderTimelineSkeleton();
@@ -163,6 +137,8 @@ async function loadEvents() {
   state.allEvents     = data ?? [];
   state.selectedIndex = null;
   applyFiltersAndRender();
+  // Auto-select first event so detail card is immediately populated
+  if (state.visibleEvents.length > 0) selectEvent(0);
   subscribeRealtime();
 }
 
@@ -189,7 +165,7 @@ function unsubscribeRealtime() {
 
 function handleRealtimeEvent({ eventType, new: newRow, old: oldRow }) {
   if (eventType === 'INSERT') {
-    const insertAt = state.allEvents.findIndex(e => new Date(e.event_date) > new Date(newRow.event_date));
+    const insertAt = state.allEvents.findIndex(e => e.event_date > newRow.event_date);
     if (insertAt === -1) state.allEvents.push(newRow);
     else state.allEvents.splice(insertAt, 0, newRow);
     flashTimelineIncoming();
@@ -202,19 +178,11 @@ function handleRealtimeEvent({ eventType, new: newRow, old: oldRow }) {
     const wasSelected = state.visibleEvents[state.selectedIndex]?.id === oldRow.id;
     const idx = state.allEvents.findIndex(e => e.id === oldRow.id);
     if (idx !== -1) state.allEvents.splice(idx, 1);
-    if (wasSelected) { state.selectedIndex = null; closeAllDrawers(); }
+    if (wasSelected) { state.selectedIndex = null; closeEditDrawer(); }
   }
   applyFiltersAndRender();
-  if (state.pendingInsertedAnnotationId && newRow?.id === state.pendingInsertedAnnotationId) {
-    const idx = state.visibleEvents.findIndex(e => e.id === newRow.id);
-    if (idx !== -1) selectEvent(idx);
-    state.pendingInsertedAnnotationId = null;
-    closeAllDrawers();
-  } else if (state.selectedIndex !== null) {
-    renderDetailCard();
-  } else {
-    showDetailEmpty();
-  }
+  if (state.selectedIndex !== null) renderDetailCard();
+  else showDetailEmpty();
 }
 
 function setRealtimeBadge(status) {
@@ -232,28 +200,19 @@ function flashTimelineIncoming() {
 function setupFilters() {
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const kind    = btn.dataset.filterKind;
-      const source  = btn.dataset.filterSource;
-      const context = btn.dataset.filterContext;
-      const toggle  = (set, key) => set.has(key) ? set.delete(key) : set.add(key);
-      if (kind)    toggle(state.filters.kinds, kind);
-      if (source)  toggle(state.filters.sources, source);
-      if (context) toggle(state.filters.contexts, context);
-      const isActive =
-        (kind    && state.filters.kinds.has(kind)) ||
-        (source  && state.filters.sources.has(source)) ||
-        (context && state.filters.contexts.has(context));
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-pressed', String(isActive));
+      const kind = btn.dataset.filterKind;
+      if (!kind) return;
+      if (state.filters.kinds.has(kind)) state.filters.kinds.delete(kind);
+      else state.filters.kinds.add(kind);
+      btn.classList.toggle('active', state.filters.kinds.has(kind));
+      btn.setAttribute('aria-pressed', String(state.filters.kinds.has(kind)));
       applyFiltersAndRender();
     });
   });
 }
 
 function applyFiltersAndRender() {
-  state.visibleEvents = state.allEvents.filter(ev => {
-    return state.filters.kinds.has(ev.event_type);
-  });
+  state.visibleEvents = state.allEvents.filter(ev => state.filters.kinds.has(ev.event_type));
   if (state.selectedIndex !== null && state.selectedIndex >= state.visibleEvents.length) {
     state.selectedIndex = state.visibleEvents.length ? state.visibleEvents.length - 1 : null;
   }
@@ -262,6 +221,7 @@ function applyFiltersAndRender() {
 }
 
 function clearTimeline() { timelineTrack.innerHTML = ''; timelineAxis.innerHTML = ''; }
+
 function renderTimelineSkeleton() {
   clearTimeline();
   timelineEmpty.hidden = true;
@@ -273,59 +233,81 @@ function renderTimeline() {
   const events = state.visibleEvents;
   if (!events.length) { timelineEmpty.hidden = false; return; }
   timelineEmpty.hidden = true;
-  const times  = events.map(e => new Date(e.event_date).getTime());
-  const tMin   = Math.min(...times);
-  const tMax   = Math.max(...times);
+
+  const wrapW = $('timeline-wrapper').clientWidth - TIMELINE_PADDING * 2;
+
+  // Parse event_date strings as local dates (avoid UTC midnight offset)
+  const times = events.map(e => parseDateLocal(e.event_date));
+  const tMin  = Math.min(...times);
+  const tMax  = Math.max(...times);
+  // If only one event (or all same date), centre it in the track
   const tRange = tMax - tMin || 1;
-  const wrapW  = $('timeline-wrapper').clientWidth - TIMELINE_PADDING * 2;
-  buildAxisTicks(tMin, tMax, wrapW);
+  const singleEvent = tMax === tMin;
+
+  buildAxisTicks(tMin, tMax, wrapW, singleEvent);
+
   events.forEach((ev, i) => {
-    const leftPx = TIMELINE_PADDING + (((new Date(ev.event_date).getTime() - tMin) / tRange) * wrapW);
+    const t      = parseDateLocal(ev.event_date);
+    const leftPx = singleEvent
+      ? TIMELINE_PADDING + wrapW / 2   // centre single event
+      : TIMELINE_PADDING + ((t - tMin) / tRange) * wrapW;
+
     const node = document.createElement('div');
     node.className = `timeline-event timeline-event--${ev.event_type}`;
     node.style.left = `${leftPx}px`;
     node.dataset.index = i;
     node.tabIndex = 0;
+
     const dot = document.createElement('div');
     dot.className = `timeline-event__dot timeline-event__dot--${ev.event_type}`;
     const connector = document.createElement('div');
     connector.className = 'timeline-event__connector';
     node.appendChild(connector);
     node.appendChild(dot);
+
     if (i === state.selectedIndex) node.classList.add('selected');
     node.addEventListener('click', () => selectEvent(i));
     node.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') selectEvent(i); });
     timelineTrack.appendChild(node);
   });
+
   timelineTrack.style.width = `${TIMELINE_PADDING * 2 + wrapW}px`;
 }
 
-function buildAxisTicks(tMin, tMax, wrapW) {
-  const intervals = [60e3, 5*60e3, 15*60e3, 60*60e3, 6*3600e3, 86400e3, 7*86400e3, 30*86400e3];
-  const range = tMax - tMin;
+// Parse a YYYY-MM-DD string as local midnight (not UTC) to avoid timezone shift
+function parseDateLocal(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
+
+function buildAxisTicks(tMin, tMax, wrapW, singleEvent) {
+  if (singleEvent) {
+    // Just show the single date centred
+    const tick = document.createElement('div');
+    tick.className = 'timeline-axis__tick';
+    tick.style.left = `${TIMELINE_PADDING + wrapW / 2}px`;
+    tick.textContent = new Date(tMin).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    timelineAxis.appendChild(tick);
+    return;
+  }
+  const intervals = [86400e3, 7*86400e3, 30*86400e3, 90*86400e3, 365*86400e3];
+  const range    = tMax - tMin;
   const interval = intervals.find(iv => Math.floor(range / iv) <= 8) ?? intervals.at(-1);
   const firstTick = Math.ceil(tMin / interval) * interval;
   for (let t = firstTick; t <= tMax; t += interval) {
-    const leftPx = TIMELINE_PADDING + ((t - tMin) / (tMax - tMin || 1)) * wrapW;
+    const leftPx = TIMELINE_PADDING + ((t - tMin) / range) * wrapW;
     const tick = document.createElement('div');
     tick.className = 'timeline-axis__tick';
     tick.style.left = `${leftPx}px`;
-    tick.textContent = formatAxisTick(t, range);
+    tick.textContent = new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' });
     timelineAxis.appendChild(tick);
   }
-}
-
-function formatAxisTick(ts, range) {
-  const d = new Date(ts);
-  if (range < 2 * 3600e3) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (range < 48 * 3600e3) return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' });
 }
 
 function selectEvent(index) {
   state.selectedIndex = index;
   document.querySelectorAll('.timeline-event').forEach((el, i) => el.classList.toggle('selected', i === index));
-  closeAllDrawers();
+  closeEditDrawer();
   renderDetailNav();
   renderDetailCard();
 }
@@ -337,7 +319,11 @@ function renderDetailNav() {
   state.visibleEvents.forEach((ev, i) => {
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = [formatDate(ev.event_date), '•', ev.event_type, ev.title ? '— ' + ev.title.slice(0, 55) : ''].filter(Boolean).join('  ');
+    opt.textContent = [
+      formatDate(ev.event_date), '•',
+      capitalise(ev.event_type),
+      ev.title ? '— ' + ev.title.slice(0, 55) : ''
+    ].filter(Boolean).join('  ');
     opt.selected = i === state.selectedIndex;
     eventNavSelect.appendChild(opt);
   });
@@ -349,96 +335,50 @@ function renderDetailCard() {
   const ev = state.visibleEvents[state.selectedIndex];
   if (!ev) return showDetailEmpty();
   detailEmpty.hidden = true;
-  detailCard.hidden = false;
-  cardKind.textContent = ev.event_type;
-  cardKind.className = `detail-card__kind detail-card__kind--${ev.event_type}`;
-  cardSourceBadge.textContent = '';
-  cardSourceBadge.hidden = true;
-  cardContextBadge.hidden = true;
-  cardTime.textContent = formatDate(ev.event_date);
+  detailCard.hidden  = false;
+  cardKind.textContent  = capitalise(ev.event_type);
+  cardKind.className    = `detail-card__kind detail-card__kind--${ev.event_type}`;
+  cardTime.textContent  = formatDate(ev.event_date);
   cardSummary.textContent = ev.title || capitalise(ev.event_type);
-  cardMeta.innerHTML = '';
-  cardBody.textContent = ev.body || '';
+  cardMeta.innerHTML    = '';
+  cardBody.textContent  = ev.body || '';
   renderCardActions(ev);
-  if (cardPayloadWrap) cardPayloadWrap.hidden = true;
-  if (linkedPanel) linkedPanel.hidden = true;
+  const wrap = $('card-payload-wrapper');
+  if (wrap) wrap.hidden = true;
+  const lp = $('linked-annotations');
+  if (lp) lp.hidden = true;
+  const sb = $('card-source-badge');
+  if (sb) sb.hidden = true;
+  const cb = $('card-context-badge');
+  if (cb) cb.hidden = true;
 }
 
 function renderCardActions(ev) {
   cardActions.innerHTML = '';
   const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'nav-btn nav-btn--primary'; btn.textContent = '✏ Edit event';
+  btn.type = 'button';
+  btn.className = 'nav-btn nav-btn--primary';
+  btn.textContent = '✏ Edit event';
   btn.addEventListener('click', () => openEditDrawer(ev));
   cardActions.appendChild(btn);
 }
 
-function openAnnotationDrawer(ev) {
-  closeAllDrawers();
-  state.annotationSourceId = ev.id;
-  annotationDrawer.hidden = false;
-  annotationLinked.textContent = `${ev.event_type} • ${formatDate(ev.event_date)} • ${ev.title || 'event'}`;
-  annotationKind.value = 'update';
-  annotationContext.value = 'production';
-  annotationSummary.value = '';
-  annotationNarrative.value = '';
-  annotationStatus.hidden = true;
-  annotationStatus.textContent = '';
-  annotationSummary.focus();
-}
-
-function closeAnnotationDrawer() {
-  state.annotationSourceId = null;
-  annotationDrawer.hidden = true;
-  annotationStatus.hidden = true;
-}
-
-function setupAnnotationForm() {
-  annotationCancel.addEventListener('click', closeAnnotationDrawer);
-  annotationReset.addEventListener('click', () => {
-    annotationKind.value = 'update'; annotationContext.value = 'production';
-    annotationSummary.value = ''; annotationNarrative.value = ''; annotationStatus.hidden = true;
-  });
-  annotationForm.addEventListener('submit', async e => {
-    e.preventDefault();
-    const sourceEvent = state.allEvents.find(ev => ev.id === state.annotationSourceId);
-    if (!sourceEvent) return;
-    annotationSubmit.disabled = true;
-    annotationStatus.hidden = false;
-    annotationStatus.textContent = 'Saving…';
-    annotationStatus.dataset.state = 'working';
-    const row = {
-      project_id:  sourceEvent.project_id,
-      event_date:  new Date().toISOString().slice(0, 10),
-      event_type:  annotationKind.value,
-      title:       annotationSummary.value.trim(),
-      body:        annotationNarrative.value.trim() || null,
-    };
-    const { data, error } = await supabase.from('hub_project_events').insert(row).select('*').single();
-    annotationSubmit.disabled = false;
-    if (error) { annotationStatus.textContent = error.message; annotationStatus.dataset.state = 'error'; return; }
-    state.pendingInsertedAnnotationId = data.id;
-    annotationStatus.textContent = 'Saved. Waiting for live event…';
-    annotationStatus.dataset.state = 'ok';
-  });
-}
-
 function openEditDrawer(ev) {
-  closeAllDrawers();
-  state.editingEventId = ev.id;
-  editDrawer.hidden = false;
-  editKind.value = ev.event_type ?? 'update';
-  editContext.value = 'production';
-  editAuthor.value = '';
-  editSummary.value = ev.title ?? '';
-  editNarrative.value = ev.body ?? '';
-  editStatus.hidden = true; editStatus.textContent = '';
+  state.editingEventId  = ev.id;
+  editDrawer.hidden     = false;
+  editKind.value        = ev.event_type ?? 'update';
+  editAuthor.value      = '';
+  editSummary.value     = ev.title ?? '';
+  editNarrative.value   = ev.body  ?? '';
+  editStatus.hidden     = true;
+  editStatus.textContent = '';
   editSummary.focus();
 }
 
 function closeEditDrawer() {
   state.editingEventId = null;
-  editDrawer.hidden = true;
-  editStatus.hidden = true;
+  editDrawer.hidden    = true;
+  editStatus.hidden    = true;
 }
 
 function setupEditForm() {
@@ -451,7 +391,7 @@ function setupEditForm() {
     e.preventDefault();
     if (!state.editingEventId) return;
     editSubmit.disabled = true;
-    editStatus.hidden = false;
+    editStatus.hidden   = false;
     editStatus.textContent = 'Saving…';
     editStatus.dataset.state = 'working';
     const patch = {
@@ -479,7 +419,7 @@ function setupDeleteDialog() {
   deleteConfirm.addEventListener('click', async () => {
     if (!state.pendingDeleteId) return;
     deleteConfirm.disabled = true;
-    deleteStatus.hidden = false;
+    deleteStatus.hidden    = false;
     deleteStatus.textContent = 'Deleting…';
     deleteStatus.dataset.state = 'working';
     const { error } = await supabase.from('hub_project_events').delete().eq('id', state.pendingDeleteId);
@@ -491,23 +431,18 @@ function setupDeleteDialog() {
   });
 }
 
-function closeAllDrawers() { closeAnnotationDrawer(); closeEditDrawer(); }
-
 function setupNavListeners() {
-  navPrev.addEventListener('click', () => { if (state.selectedIndex > 0) selectEvent(state.selectedIndex - 1); });
-  navNext.addEventListener('click', () => { if (state.selectedIndex < state.visibleEvents.length - 1) selectEvent(state.selectedIndex + 1); });
+  navPrev.addEventListener('click', () => {
+    if (state.selectedIndex > 0) selectEvent(state.selectedIndex - 1);
+  });
+  navNext.addEventListener('click', () => {
+    if (state.selectedIndex < state.visibleEvents.length - 1) selectEvent(state.selectedIndex + 1);
+  });
   eventNavSelect.addEventListener('change', () => selectEvent(Number(eventNavSelect.value)));
-  if (payloadToggle) {
-    payloadToggle.addEventListener('click', () => {
-      const open = !cardPayload.hidden;
-      cardPayload.hidden = open;
-      payloadToggle.textContent = open ? 'Show raw payload ▾' : 'Hide raw payload ▴';
-    });
-  }
 }
 
 function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function capitalise(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
