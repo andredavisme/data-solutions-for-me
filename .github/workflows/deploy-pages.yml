@@ -1,11 +1,9 @@
-name: Deploy Project Hub to GitHub Pages
+name: Deploy to GitHub Pages
 
 on:
   push:
     branches:
       - main
-    paths:
-      - 'project-hub/**'
   workflow_dispatch:
 
 permissions:
@@ -33,7 +31,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: project-hub
+          path: .  # serve the whole repo root
 
       - name: Deploy to GitHub Pages
         id: deployment
