@@ -2,98 +2,18 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 const SUPABASE_URL      = 'https://hhyhulqngdkwsxhymmcd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_haKvwV0M7KMj4Qz69M6WGg_KmIfU-aI';
-const VERIFY_URL        = `${SUPABASE_URL}/functions/v1/verify-passphrase`;
-const TOKEN_KEY         = 'hub_auth_token';
 
-/* ── Auth helpers ─────────────────────────────────────────── */
-function getStoredToken() {
-  try {
-    const raw = localStorage.getItem(TOKEN_KEY);
-    if (!raw) return null;
-    const payload = JSON.parse(atob(raw.split('.')[1]));
-    if (payload.exp && payload.exp * 1000 < Date.now()) {
-      localStorage.removeItem(TOKEN_KEY);
-      return null;
-    }
-    return raw;
-  } catch { return null; }
-}
-function storeToken(token) { localStorage.setItem(TOKEN_KEY, token); }
-function clearToken()      { localStorage.removeItem(TOKEN_KEY); }
-
-function buildSupabase(token) {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      storageKey: `hub-${crypto.randomUUID()}`,
-    },
-    global: {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    },
-  });
-}
-
-let supabase     = null;
-let initialized  = false;
-
-/* ── Gate UI refs ─────────────────────────────────────────── */
-const authGate      = document.getElementById('auth-gate');
-const authGateForm  = document.getElementById('auth-gate-form');
-const authGateInput = document.getElementById('auth-gate-input');
-const authGateBtn   = document.getElementById('auth-gate-submit');
-const authGateError = document.getElementById('auth-gate-error');
-const appDiv        = document.getElementById('app');
-const authSignout   = document.getElementById('auth-signout');
-
-function showGate() {
-  authGate.hidden = false;
-  appDiv.hidden   = true;
-  authGateInput.value  = '';
-  authGateError.hidden = true;
-  authGateInput.focus();
-}
-function showApp() {
-  authGate.hidden = true;
-  appDiv.hidden   = false;
-}
-
-async function attemptLogin(passphrase) {
-  authGateBtn.disabled    = true;
-  authGateBtn.textContent = 'Checking…';
-  authGateError.hidden    = true;
-  try {
-    const res  = await fetch(VERIFY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passphrase }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json.token) throw new Error(json.error || 'Incorrect passphrase');
-    storeToken(json.token);
-    supabase = buildSupabase(json.token);
-    showApp();
-    setupApp();
-    await loadProjects();
-  } catch (err) {
-    authGateError.textContent = err.message;
-    authGateError.hidden      = false;
-    authGateInput.select();
-  } finally {
-    authGateBtn.disabled    = false;
-    authGateBtn.textContent = 'Enter';
-  }
-}
-
-authGateForm.addEventListener('submit', e => { e.preventDefault(); attemptLogin(authGateInput.value); });
-authSignout.addEventListener('click', () => {
-  clearToken();
-  unsubscribeRealtime();
-  initialized = false;
-  supabase    = null;
-  showGate();
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
 });
+
+/* ── Hide gate, show app immediately ────────────────────── */
+document.getElementById('auth-gate').hidden = true;
+document.getElementById('app').hidden = false;
 
 /* ── App state ────────────────────────────────────────────── */
 const state = {
@@ -172,16 +92,13 @@ const cardPayload         = $('card-payload');
 const payloadToggle       = $('payload-toggle');
 const TIMELINE_PADDING    = 40;
 
-/* ── One-time listener setup ─────────────────────────────────── */
-function setupApp() {
-  if (initialized) return;
-  initialized = true;
-  setupFilters();
-  setupNavListeners();
-  setupAnnotationForm();
-  setupEditForm();
-  setupDeleteDialog();
-}
+/* ── Boot ─────────────────────────────────────────────────── */
+setupFilters();
+setupNavListeners();
+setupAnnotationForm();
+setupEditForm();
+setupDeleteDialog();
+loadProjects();
 
 /* ── Data loading ───────────────────────────────────────────── */
 async function loadProjects() {
@@ -262,7 +179,7 @@ function subscribeRealtime() {
 }
 
 function unsubscribeRealtime() {
-  if (state.realtimeChannel && supabase) { supabase.removeChannel(state.realtimeChannel); state.realtimeChannel = null; }
+  if (state.realtimeChannel) { supabase.removeChannel(state.realtimeChannel); state.realtimeChannel = null; }
   setRealtimeBadge('off');
 }
 
@@ -649,14 +566,3 @@ function formatTime(iso) {
 }
 function capitalise(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-/* ── Boot ─────────────────────────────────────────────────── */
-const _bootToken = getStoredToken();
-if (_bootToken) {
-  supabase = buildSupabase(_bootToken);
-  showApp();
-  setupApp();
-  loadProjects();
-} else {
-  showGate();
-}
