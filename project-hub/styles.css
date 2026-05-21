@@ -275,10 +275,21 @@ html, body {
   background: var(--surface-2); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--radius);
   padding: 5px 12px; font-size:12px; cursor:pointer;
-  transition: background var(--t);
+  transition: background var(--t), box-shadow var(--t);
+  white-space: nowrap;
 }
 .nav-btn:hover { background: var(--border); }
 .nav-btn:disabled { opacity:.35; cursor:not-allowed; }
+.nav-btn--primary {
+  background: rgba(99,102,241,.2); color: #a5b4fc;
+  border-color: rgba(99,102,241,.4);
+}
+.nav-btn--primary:hover {
+  background: rgba(99,102,241,.35);
+  box-shadow: 0 0 10px rgba(99,102,241,.25);
+}
+.nav-btn--primary:disabled { opacity:.35; cursor:not-allowed; box-shadow:none; }
+
 .detail-card__nav-dropdown { flex:1; }
 .detail-card__nav-dropdown select {
   width:100%; background: var(--surface-2); color: var(--text);
@@ -336,6 +347,111 @@ html, body {
   font-size:14px; color: var(--text); white-space:pre-wrap; line-height:1.7;
 }
 
+/* Card actions row (Annotate button lives here) */
+.detail-card__actions {
+  margin-top: 20px;
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+
+/* ============================================================
+   Annotation drawer
+   ============================================================ */
+.annotation-drawer {
+  margin-top: 24px;
+  border: 1px solid rgba(99,102,241,.35);
+  border-radius: var(--radius);
+  background: rgba(99,102,241,.05);
+  overflow: hidden;
+  animation: drawer-in .18s ease;
+}
+@keyframes drawer-in {
+  from { opacity:0; transform: translateY(-6px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+.annotation-drawer__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(99,102,241,.2);
+  background: rgba(99,102,241,.08);
+}
+.annotation-drawer__header h3 {
+  font-size: 13px; font-weight: 600; color: #a5b4fc;
+}
+.annotation-drawer__close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+  transition: color var(--t), background var(--t);
+}
+.annotation-drawer__close:hover {
+  color: var(--text); background: var(--surface-2);
+}
+
+.annotation-drawer__linked {
+  padding: 8px 16px;
+  font-size: 11px; color: var(--text-muted); font-style: italic;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,.15);
+}
+
+/* Form grid */
+.annotation-form {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.annotation-form__full { grid-column: 1 / -1; }
+
+.annotation-form label {
+  display: flex; flex-direction: column; gap: 5px;
+}
+.annotation-form label > span {
+  font-size: 11px; font-weight: 600; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.annotation-form input,
+.annotation-form select,
+.annotation-form textarea {
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 7px 10px; font-size: 13px; font-family: inherit;
+  transition: border-color var(--t), box-shadow var(--t);
+  resize: vertical;
+}
+.annotation-form input:focus,
+.annotation-form select:focus,
+.annotation-form textarea:focus {
+  outline: none;
+  border-color: rgba(99,102,241,.6);
+  box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+.annotation-form input::placeholder,
+.annotation-form textarea::placeholder { color: var(--text-muted); opacity:.7; }
+
+.annotation-form__actions {
+  grid-column: 1 / -1;
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+
+.annotation-form__status {
+  grid-column: 1 / -1;
+  font-size: 12px; padding: 6px 10px; border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.annotation-form__status[data-state="working"] {
+  color: var(--text-muted);
+}
+.annotation-form__status[data-state="ok"] {
+  background: rgba(16,185,129,.08); border-color: rgba(16,185,129,.3); color: #6ee7b7;
+}
+.annotation-form__status[data-state="error"] {
+  background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.3); color: #fca5a5;
+}
+
+/* ============================================================
+   Payload block
+   ============================================================ */
 .payload-toggle {
   background:none; border:none; color: var(--text-muted); font-size:12px;
   cursor:pointer; margin-top:16px; padding:4px 0; transition:color var(--t);
@@ -366,4 +482,8 @@ html, body {
   .timeline-section { padding:14px; }
   .detail-panel { margin:0 14px 24px; }
   .detail-card__time { margin-left:0; }
+  .annotation-form {
+    grid-template-columns: 1fr;
+  }
+  .annotation-form__full { grid-column: 1; }
 }
