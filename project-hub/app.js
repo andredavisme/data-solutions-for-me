@@ -1,16 +1,15 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-const SUPABASE_URL    = 'https://hhyhulqngdkwsxhymmcd.supabase.co';
+const SUPABASE_URL      = 'https://hhyhulqngdkwsxhymmcd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_haKvwV0M7KMj4Qz69M6WGg_KmIfU-aI';
-const VERIFY_URL      = `${SUPABASE_URL}/functions/v1/verify-passphrase`;
-const TOKEN_KEY       = 'hub_auth_token';
+const VERIFY_URL        = `${SUPABASE_URL}/functions/v1/verify-passphrase`;
+const TOKEN_KEY         = 'hub_auth_token';
 
 /* ── Auth helpers ─────────────────────────────────────────── */
 function getStoredToken() {
   try {
     const raw = localStorage.getItem(TOKEN_KEY);
     if (!raw) return null;
-    // Decode payload to check expiry (no signature verification on client)
     const payload = JSON.parse(atob(raw.split('.')[1]));
     if (payload.exp && payload.exp * 1000 < Date.now()) {
       localStorage.removeItem(TOKEN_KEY);
@@ -19,22 +18,18 @@ function getStoredToken() {
     return raw;
   } catch { return null; }
 }
-
 function storeToken(token) { localStorage.setItem(TOKEN_KEY, token); }
 function clearToken()      { localStorage.removeItem(TOKEN_KEY); }
 
-/* Build a Supabase client that injects the hub token as a custom header on writes */
 function buildSupabase(token) {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: {
-      headers: token ? { 'x-hub-token': token } : {},
-    },
+    global: { headers: token ? { 'x-hub-token': token } : {} },
   });
 }
 
 let supabase = buildSupabase(getStoredToken());
 
-/* ── Gate logic ───────────────────────────────────────────── */
+/* ── Gate UI refs ─────────────────────────────────────────── */
 const authGate      = document.getElementById('auth-gate');
 const authGateForm  = document.getElementById('auth-gate-form');
 const authGateInput = document.getElementById('auth-gate-input');
@@ -46,22 +41,21 @@ const authSignout   = document.getElementById('auth-signout');
 function showGate() {
   authGate.hidden = false;
   appDiv.hidden   = true;
-  authGateInput.value = '';
+  authGateInput.value  = '';
   authGateError.hidden = true;
   authGateInput.focus();
 }
-
 function showApp() {
   authGate.hidden = true;
   appDiv.hidden   = false;
 }
 
 async function attemptLogin(passphrase) {
-  authGateBtn.disabled = true;
+  authGateBtn.disabled    = true;
   authGateBtn.textContent = 'Checking…';
-  authGateError.hidden = true;
+  authGateError.hidden    = true;
   try {
-    const res = await fetch(VERIFY_URL, {
+    const res  = await fetch(VERIFY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ passphrase }),
@@ -74,37 +68,18 @@ async function attemptLogin(passphrase) {
     init();
   } catch (err) {
     authGateError.textContent = err.message;
-    authGateError.hidden = false;
+    authGateError.hidden      = false;
     authGateInput.select();
   } finally {
-    authGateBtn.disabled = false;
+    authGateBtn.disabled    = false;
     authGateBtn.textContent = 'Enter';
   }
 }
 
-authGateForm.addEventListener('submit', e => {
-  e.preventDefault();
-  attemptLogin(authGateInput.value);
-});
+authGateForm.addEventListener('submit', e => { e.preventDefault(); attemptLogin(authGateInput.value); });
+authSignout.addEventListener('click', () => { clearToken(); supabase = buildSupabase(null); showGate(); });
 
-authSignout.addEventListener('click', () => {
-  clearToken();
-  supabase = buildSupabase(null);
-  showGate();
-});
-
-// Boot: if a valid token exists, skip gate
-if (getStoredToken()) {
-  showApp();
-  init();
-} else {
-  showGate();
-}
-
-/* ════════════════════════════════════════════════════════════
-   Everything below is unchanged from the original app.js
-   ════════════════════════════════════════════════════════════ */
-
+/* ── App state ────────────────────────────────────────────── */
 const state = {
   projects: [],
   activeProjectId: null,
@@ -117,12 +92,13 @@ const state = {
   editingEventId: null,
   pendingDeleteId: null,
   filters: {
-    kinds: new Set(['insert','update','delete','expectation','deviation','adaptation']),
-    sources: new Set(['automatic','manual']),
+    kinds:    new Set(['insert','update','delete','expectation','deviation','adaptation']),
+    sources:  new Set(['automatic','manual']),
     contexts: new Set(['production','development','test']),
   },
 };
 
+/* ── DOM refs (must be declared before boot block) ────────── */
 const $ = id => document.getElementById(id);
 const projectSelect       = $('project-select');
 const projectTitle        = $('project-title');
@@ -178,7 +154,9 @@ const deleteStatus        = $('delete-status');
 const cardPayloadWrap     = $('card-payload-wrapper');
 const cardPayload         = $('card-payload');
 const payloadToggle       = $('payload-toggle');
+const TIMELINE_PADDING    = 40;
 
+/* ── App functions ────────────────────────────────────────── */
 function init() {
   setupFilters();
   setupNavListeners();
@@ -188,7 +166,6 @@ function init() {
   loadProjects();
 }
 
-/* ── Projects ─────────────────────────────────────────────── */
 async function loadProjects() {
   projectTitle.textContent = 'Loading…';
   const { data, error } = await supabase
@@ -200,7 +177,7 @@ async function loadProjects() {
   populateProjectSelect();
   if (state.projects.length > 0) {
     state.activeProjectId = state.projects[0].id;
-    projectSelect.value = state.activeProjectId;
+    projectSelect.value   = state.activeProjectId;
     await loadEvents();
   } else {
     projectTitle.textContent = 'No projects found';
@@ -219,19 +196,15 @@ function populateProjectSelect() {
 
 projectSelect.addEventListener('change', async () => {
   state.activeProjectId = projectSelect.value;
-  state.selectedIndex = null;
+  state.selectedIndex   = null;
   closeAllDrawers();
   unsubscribeRealtime();
   await loadEvents();
 });
 
-/* ── Events ───────────────────────────────────────────────── */
 async function loadEvents() {
   const project = state.projects.find(p => p.id === state.activeProjectId);
-  if (project) {
-    projectTitle.textContent = project.title;
-    projectStatus.textContent = project.status ?? '';
-  }
+  if (project) { projectTitle.textContent = project.title; projectStatus.textContent = project.status ?? ''; }
   renderTimelineSkeleton();
   const { data, error } = await supabase
     .from('project_events')
@@ -244,13 +217,12 @@ async function loadEvents() {
     clearTimeline();
     return;
   }
-  state.allEvents = data ?? [];
+  state.allEvents     = data ?? [];
   state.selectedIndex = null;
   applyFiltersAndRender();
   subscribeRealtime();
 }
 
-/* ── Realtime ─────────────────────────────────────────────── */
 function subscribeRealtime() {
   if (state.realtimeChannel) unsubscribeRealtime();
   setRealtimeBadge('connecting');
@@ -261,17 +233,14 @@ function subscribeRealtime() {
       filter: `project_id=eq.${state.activeProjectId}`
     }, payload => handleRealtimeEvent(payload))
     .subscribe(status => {
-      if (status === 'SUBSCRIBED')                              setRealtimeBadge('live');
+      if (status === 'SUBSCRIBED')                               setRealtimeBadge('live');
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setRealtimeBadge('error');
-      if (status === 'CLOSED')                                  setRealtimeBadge('off');
+      if (status === 'CLOSED')                                   setRealtimeBadge('off');
     });
 }
 
 function unsubscribeRealtime() {
-  if (state.realtimeChannel) {
-    supabase.removeChannel(state.realtimeChannel);
-    state.realtimeChannel = null;
-  }
+  if (state.realtimeChannel) { supabase.removeChannel(state.realtimeChannel); state.realtimeChannel = null; }
   setRealtimeBadge('off');
 }
 
@@ -317,7 +286,6 @@ function flashTimelineIncoming() {
   setTimeout(() => wrapper.classList.remove('timeline-wrapper--incoming'), 600);
 }
 
-/* ── Filters ──────────────────────────────────────────────── */
 function setupFilters() {
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -354,12 +322,10 @@ function applyFiltersAndRender() {
   renderDetailNav();
 }
 
-/* ── Timeline render ──────────────────────────────────────── */
-const TIMELINE_PADDING = 40;
 function clearTimeline() { timelineTrack.innerHTML = ''; timelineAxis.innerHTML = ''; }
 function renderTimelineSkeleton() {
   clearTimeline();
-  timelineEmpty.hidden = true;
+  timelineEmpty.hidden    = true;
   timelineTrack.innerHTML = '<div class="skeleton" style="height:14px;width:200px;margin:20px auto"></div>';
 }
 
@@ -375,24 +341,20 @@ function renderTimeline() {
   const wrapW  = $('timeline-wrapper').clientWidth - TIMELINE_PADDING * 2;
   buildAxisTicks(tMin, tMax, wrapW);
   events.forEach((ev, i) => {
-    const leftPx  = TIMELINE_PADDING + (((new Date(ev.created_at).getTime() - tMin) / tRange) * wrapW);
+    const leftPx   = TIMELINE_PADDING + (((new Date(ev.created_at).getTime() - tMin) / tRange) * wrapW);
     const isManual = ev.is_manual === true;
     const ctx      = ev.context ?? 'production';
     const isDev    = ctx === 'development' || ctx === 'test';
     const node = document.createElement('div');
-    node.className = [
-      'timeline-event',
-      `timeline-event--${isManual ? 'manual' : 'auto'}`,
-      isDev ? `timeline-event--${ctx}` : ''
-    ].filter(Boolean).join(' ');
-    node.style.left  = `${leftPx}px`;
+    node.className = ['timeline-event', `timeline-event--${isManual ? 'manual' : 'auto'}`, isDev ? `timeline-event--${ctx}` : ''].filter(Boolean).join(' ');
+    node.style.left    = `${leftPx}px`;
     node.dataset.index = i;
-    node.tabIndex = 0;
+    node.tabIndex      = 0;
     const dot = document.createElement('div');
     dot.className = `timeline-event__dot timeline-event__dot--${ev.event_kind}`;
     if (isDev) {
       const label = document.createElement('span');
-      label.className = `timeline-event__ctx-label timeline-event__ctx-label--${ctx}`;
+      label.className   = `timeline-event__ctx-label timeline-event__ctx-label--${ctx}`;
       label.textContent = ctx === 'development' ? 'dev' : 'test';
       node.appendChild(label);
     }
@@ -409,10 +371,10 @@ function renderTimeline() {
 }
 
 function buildAxisTicks(tMin, tMax, wrapW) {
-  const intervals  = [60e3, 5*60e3, 15*60e3, 60*60e3, 6*3600e3, 86400e3, 7*86400e3, 30*86400e3];
-  const range      = tMax - tMin;
-  const interval   = intervals.find(iv => Math.floor(range / iv) <= 8) ?? intervals.at(-1);
-  const firstTick  = Math.ceil(tMin / interval) * interval;
+  const intervals = [60e3, 5*60e3, 15*60e3, 60*60e3, 6*3600e3, 86400e3, 7*86400e3, 30*86400e3];
+  const range     = tMax - tMin;
+  const interval  = intervals.find(iv => Math.floor(range / iv) <= 8) ?? intervals.at(-1);
+  const firstTick = Math.ceil(tMin / interval) * interval;
   for (let t = firstTick; t <= tMax; t += interval) {
     const leftPx = TIMELINE_PADDING + ((t - tMin) / (tMax - tMin || 1)) * wrapW;
     const tick = document.createElement('div');
@@ -430,7 +392,6 @@ function formatAxisTick(ts, range) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' });
 }
 
-/* ── Selection ────────────────────────────────────────────── */
 function selectEvent(index) {
   state.selectedIndex = index;
   document.querySelectorAll('.timeline-event').forEach((el, i) => el.classList.toggle('selected', i === index));
@@ -446,20 +407,15 @@ function renderDetailNav() {
   state.visibleEvents.forEach((ev, i) => {
     const ctx = ev.context ?? 'production';
     const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = [
-      formatTime(ev.created_at), '•', ev.event_kind,
-      ctx !== 'production' ? `[${ctx}]` : '',
-      ev.summary ? '— ' + ev.summary.slice(0, 55) : ''
-    ].filter(Boolean).join('  ');
-    opt.selected = i === state.selectedIndex;
+    opt.value       = i;
+    opt.textContent = [formatTime(ev.created_at), '•', ev.event_kind, ctx !== 'production' ? `[${ctx}]` : '', ev.summary ? '— ' + ev.summary.slice(0, 55) : ''].filter(Boolean).join('  ');
+    opt.selected    = i === state.selectedIndex;
     eventNavSelect.appendChild(opt);
   });
   navPrev.disabled = state.selectedIndex === null || state.selectedIndex === 0;
   navNext.disabled = state.selectedIndex === null || state.selectedIndex === state.visibleEvents.length - 1;
 }
 
-/* ── Detail card ──────────────────────────────────────────── */
 function renderDetailCard() {
   const ev = state.visibleEvents[state.selectedIndex];
   if (!ev) return showDetailEmpty();
@@ -475,7 +431,7 @@ function renderDetailCard() {
     cardContextBadge.textContent = ctx === 'development' ? '🛠 dev' : '🧪 test';
     cardContextBadge.className   = `detail-card__context-badge detail-card__context-badge--${ctx}`;
     cardContextBadge.hidden = false;
-  } else cardContextBadge.hidden = true;
+  } else { cardContextBadge.hidden = true; }
   cardTime.textContent    = formatTime(ev.created_at);
   cardSummary.textContent = ev.summary || `${capitalise(ev.event_kind)} on ${ev.source_type}`;
   cardMeta.innerHTML = [
@@ -487,44 +443,36 @@ function renderDetailCard() {
   renderCardActions(ev);
   renderLinkedAnnotations(ev);
   if (ev.payload) {
-    cardPayloadWrap.hidden = false;
+    cardPayloadWrap.hidden  = false;
     cardPayload.textContent = JSON.stringify(ev.payload, null, 2);
   } else {
     cardPayloadWrap.hidden = true;
-    cardPayload.hidden = true;
+    cardPayload.hidden     = true;
   }
 }
 
 function renderCardActions(ev) {
   cardActions.innerHTML = '';
   if (ev.is_manual === true) {
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'nav-btn';
-    editBtn.textContent = '✏ Edit annotation';
-    editBtn.addEventListener('click', () => openEditDrawer(ev));
-    cardActions.appendChild(editBtn);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'nav-btn'; btn.textContent = '✏ Edit annotation';
+    btn.addEventListener('click', () => openEditDrawer(ev));
+    cardActions.appendChild(btn);
   } else {
-    const annotateBtn = document.createElement('button');
-    annotateBtn.type = 'button';
-    annotateBtn.className = 'nav-btn nav-btn--primary';
-    annotateBtn.textContent = 'Annotate this event';
-    annotateBtn.addEventListener('click', () => openAnnotationDrawer(ev));
-    cardActions.appendChild(annotateBtn);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'nav-btn nav-btn--primary'; btn.textContent = 'Annotate this event';
+    btn.addEventListener('click', () => openAnnotationDrawer(ev));
+    cardActions.appendChild(btn);
   }
 }
 
-/* ── Linked annotations panel ─────────────────────────────── */
 function renderLinkedAnnotations(ev) {
   linkedList.innerHTML = '';
   if (ev.is_manual === true) { linkedPanel.hidden = true; return; }
   const linked = state.allEvents.filter(e =>
-    e.is_manual === true &&
-    Array.isArray(e.related_event_ids) &&
-    e.related_event_ids.includes(ev.id)
-  );
+    e.is_manual === true && Array.isArray(e.related_event_ids) && e.related_event_ids.includes(ev.id));
   if (!linked.length) { linkedPanel.hidden = true; return; }
-  linkedPanel.hidden = false;
+  linkedPanel.hidden      = false;
   linkedCount.textContent = `${linked.length}`;
   linked.forEach(ann => {
     const li = document.createElement('li');
@@ -535,25 +483,21 @@ function renderLinkedAnnotations(ev) {
       <time class="linked-annotations__item-time">${formatTime(ann.created_at)}</time>
       ${ann.author ? `<span class="linked-annotations__item-author">${escHtml(ann.author)}</span>` : ''}
     `;
-    li.addEventListener('click', () => {
-      const idx = state.visibleEvents.findIndex(e => e.id === ann.id);
-      if (idx !== -1) selectEvent(idx);
-    });
+    li.addEventListener('click', () => { const idx = state.visibleEvents.findIndex(e => e.id === ann.id); if (idx !== -1) selectEvent(idx); });
     linkedList.appendChild(li);
   });
 }
 
-/* ── Annotate drawer (create) ─────────────────────────────── */
 function openAnnotationDrawer(ev) {
   closeAllDrawers();
-  state.annotationSourceId = ev.id;
-  annotationDrawer.hidden  = false;
+  state.annotationSourceId     = ev.id;
+  annotationDrawer.hidden      = false;
   annotationLinked.textContent = `${ev.event_kind} • ${formatTime(ev.created_at)} • ${ev.summary || ev.source_type || 'automatic event'}`;
-  annotationKind.value      = 'adaptation';
-  annotationContext.value   = ev.context ?? 'production';
-  annotationSummary.value   = '';
-  annotationNarrative.value = '';
-  annotationStatus.hidden   = true;
+  annotationKind.value         = 'adaptation';
+  annotationContext.value      = ev.context ?? 'production';
+  annotationSummary.value      = '';
+  annotationNarrative.value    = '';
+  annotationStatus.hidden      = true;
   annotationStatus.textContent = '';
   annotationSummary.focus();
 }
@@ -567,49 +511,34 @@ function closeAnnotationDrawer() {
 function setupAnnotationForm() {
   annotationCancel.addEventListener('click', closeAnnotationDrawer);
   annotationReset.addEventListener('click', () => {
-    annotationKind.value      = 'adaptation';
-    annotationContext.value   = 'production';
-    annotationSummary.value   = '';
-    annotationNarrative.value = '';
-    annotationStatus.hidden   = true;
+    annotationKind.value = 'adaptation'; annotationContext.value = 'production';
+    annotationSummary.value = ''; annotationNarrative.value = ''; annotationStatus.hidden = true;
   });
   annotationForm.addEventListener('submit', async e => {
     e.preventDefault();
     const sourceEvent = state.allEvents.find(ev => ev.id === state.annotationSourceId);
     if (!sourceEvent) return;
-    annotationSubmit.disabled = true;
-    annotationStatus.hidden   = false;
-    annotationStatus.textContent  = 'Saving…';
+    annotationSubmit.disabled      = true;
+    annotationStatus.hidden        = false;
+    annotationStatus.textContent   = 'Saving…';
     annotationStatus.dataset.state = 'working';
     const row = {
-      project_id:        sourceEvent.project_id,
-      event_kind:        annotationKind.value,
-      source_type:       sourceEvent.source_type || 'other',
-      source_record_id:  sourceEvent.source_record_id || null,
-      monitor_event_id:  sourceEvent.monitor_event_id || null,
-      status:            'pending',
-      is_manual:         true,
-      author:            annotationAuthor.value.trim() || null,
-      summary:           annotationSummary.value.trim(),
-      narrative:         annotationNarrative.value.trim(),
-      notes:             `Manual annotation linked to ${sourceEvent.id}`,
-      related_event_ids: [sourceEvent.id],
-      context:           annotationContext.value,
+      project_id: sourceEvent.project_id, event_kind: annotationKind.value,
+      source_type: sourceEvent.source_type || 'other', source_record_id: sourceEvent.source_record_id || null,
+      monitor_event_id: sourceEvent.monitor_event_id || null, status: 'pending', is_manual: true,
+      author: annotationAuthor.value.trim() || null, summary: annotationSummary.value.trim(),
+      narrative: annotationNarrative.value.trim(), notes: `Manual annotation linked to ${sourceEvent.id}`,
+      related_event_ids: [sourceEvent.id], context: annotationContext.value,
     };
     const { data, error } = await supabase.from('project_events').insert(row).select('*').single();
     annotationSubmit.disabled = false;
-    if (error) {
-      annotationStatus.textContent   = error.message;
-      annotationStatus.dataset.state = 'error';
-      return;
-    }
+    if (error) { annotationStatus.textContent = error.message; annotationStatus.dataset.state = 'error'; return; }
     state.pendingInsertedAnnotationId = data.id;
     annotationStatus.textContent   = 'Saved. Waiting for live event…';
     annotationStatus.dataset.state = 'ok';
   });
 }
 
-/* ── Edit drawer ──────────────────────────────────────────── */
 function openEditDrawer(ev) {
   closeAllDrawers();
   state.editingEventId   = ev.id;
@@ -634,80 +563,54 @@ function setupEditForm() {
   editCancel.addEventListener('click', closeEditDrawer);
   editDelete.addEventListener('click', () => {
     const ev = state.allEvents.find(e => e.id === state.editingEventId);
-    if (!ev) return;
-    openDeleteDialog(ev);
+    if (ev) openDeleteDialog(ev);
   });
   editForm.addEventListener('submit', async e => {
     e.preventDefault();
     if (!state.editingEventId) return;
-    editSubmit.disabled = true;
-    editStatus.hidden   = false;
+    editSubmit.disabled      = true;
+    editStatus.hidden        = false;
     editStatus.textContent   = 'Saving…';
     editStatus.dataset.state = 'working';
     const patch = {
-      event_kind: editKind.value,
-      context:    editContext.value,
-      author:     editAuthor.value.trim()    || null,
-      summary:    editSummary.value.trim(),
-      narrative:  editNarrative.value.trim() || null,
+      event_kind: editKind.value, context: editContext.value,
+      author: editAuthor.value.trim() || null, summary: editSummary.value.trim(),
+      narrative: editNarrative.value.trim() || null,
     };
-    const { error } = await supabase
-      .from('project_events')
-      .update(patch)
-      .eq('id', state.editingEventId);
+    const { error } = await supabase.from('project_events').update(patch).eq('id', state.editingEventId);
     editSubmit.disabled = false;
-    if (error) {
-      editStatus.textContent   = error.message;
-      editStatus.dataset.state = 'error';
-      return;
-    }
-    editStatus.textContent   = 'Saved.';
-    editStatus.dataset.state = 'ok';
+    if (error) { editStatus.textContent = error.message; editStatus.dataset.state = 'error'; return; }
+    editStatus.textContent = 'Saved.'; editStatus.dataset.state = 'ok';
     setTimeout(closeEditDrawer, 800);
   });
 }
 
-/* ── Delete dialog ────────────────────────────────────────── */
 function openDeleteDialog(ev) {
-  state.pendingDeleteId  = ev.id;
+  state.pendingDeleteId        = ev.id;
   deleteDialogDesc.textContent = `Delete "${ev.summary || ev.event_kind}"? This cannot be undone.`;
-  deleteStatus.hidden    = true;
-  deleteStatus.textContent = '';
+  deleteStatus.hidden          = true;
+  deleteStatus.textContent     = '';
   deleteDialog.showModal();
 }
 
 function setupDeleteDialog() {
-  deleteCancel.addEventListener('click', () => {
-    state.pendingDeleteId = null;
-    deleteDialog.close();
-  });
+  deleteCancel.addEventListener('click', () => { state.pendingDeleteId = null; deleteDialog.close(); });
   deleteConfirm.addEventListener('click', async () => {
     if (!state.pendingDeleteId) return;
-    deleteConfirm.disabled = true;
-    deleteStatus.hidden    = false;
+    deleteConfirm.disabled     = true;
+    deleteStatus.hidden        = false;
     deleteStatus.textContent   = 'Deleting…';
     deleteStatus.dataset.state = 'working';
-    const { error } = await supabase
-      .from('project_events')
-      .delete()
-      .eq('id', state.pendingDeleteId);
+    const { error } = await supabase.from('project_events').delete().eq('id', state.pendingDeleteId);
     deleteConfirm.disabled = false;
-    if (error) {
-      deleteStatus.textContent   = error.message;
-      deleteStatus.dataset.state = 'error';
-      return;
-    }
+    if (error) { deleteStatus.textContent = error.message; deleteStatus.dataset.state = 'error'; return; }
     state.pendingDeleteId = null;
     deleteDialog.close();
     closeEditDrawer();
   });
 }
 
-/* ── Shared helpers ───────────────────────────────────────── */
-function closeAllDrawers() {
-  closeAnnotationDrawer();
-  closeEditDrawer();
-}
+function closeAllDrawers() { closeAnnotationDrawer(); closeEditDrawer(); }
 
 function setupNavListeners() {
   navPrev.addEventListener('click', () => { if (state.selectedIndex > 0) selectEvent(state.selectedIndex - 1); });
@@ -715,7 +618,7 @@ function setupNavListeners() {
   eventNavSelect.addEventListener('change', () => selectEvent(Number(eventNavSelect.value)));
   payloadToggle.addEventListener('click', () => {
     const open = !cardPayload.hidden;
-    cardPayload.hidden = open;
+    cardPayload.hidden    = open;
     payloadToggle.textContent = open ? 'Show raw payload ▾' : 'Hide raw payload ▴';
   });
 }
@@ -725,3 +628,11 @@ function formatTime(iso) {
 }
 function capitalise(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 function escHtml(s)     { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ── Boot (must be last — after all const declarations) ───── */
+if (getStoredToken()) {
+  showApp();
+  init();
+} else {
+  showGate();
+}
