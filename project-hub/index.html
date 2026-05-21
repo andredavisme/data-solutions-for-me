@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Hub — Expectation Timeline</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="hub-header">
+      <div class="hub-header__inner">
+        <div class="hub-header__title-block">
+          <span class="hub-header__label">Project Hub</span>
+          <h1 class="hub-header__title" id="project-title">Loading…</h1>
+          <span class="hub-header__status" id="project-status"></span>
+        </div>
+        <div class="hub-header__project-picker">
+          <label for="project-select" class="sr-only">Select project</label>
+          <select id="project-select"></select>
+        </div>
+      </div>
+    </header>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar" role="toolbar" aria-label="Timeline filters">
+      <div class="filter-bar__group">
+        <span class="filter-bar__group-label">Event type</span>
+        <button class="filter-btn active" data-filter-kind="expectation" aria-pressed="true">
+          <span class="dot dot--expectation"></span> Expectation
+        </button>
+        <button class="filter-btn active" data-filter-kind="deviation" aria-pressed="true">
+          <span class="dot dot--deviation"></span> Deviation
+        </button>
+        <button class="filter-btn active" data-filter-kind="adaptation" aria-pressed="true">
+          <span class="dot dot--adaptation"></span> Adaptation
+        </button>
+        <button class="filter-btn active" data-filter-kind="insert" aria-pressed="true">
+          <span class="dot dot--insert"></span> Insert
+        </button>
+        <button class="filter-btn active" data-filter-kind="update" aria-pressed="true">
+          <span class="dot dot--update"></span> Update
+        </button>
+        <button class="filter-btn active" data-filter-kind="delete" aria-pressed="true">
+          <span class="dot dot--delete"></span> Delete
+        </button>
+      </div>
+      <div class="filter-bar__divider" aria-hidden="true"></div>
+      <div class="filter-bar__group">
+        <span class="filter-bar__group-label">Source</span>
+        <button class="filter-btn active" data-filter-source="automatic" aria-pressed="true">
+          <span class="icon-auto" aria-hidden="true">⚙</span> Automatic
+        </button>
+        <button class="filter-btn active" data-filter-source="manual" aria-pressed="true">
+          <span class="icon-manual" aria-hidden="true">✏</span> Manual
+        </button>
+      </div>
+    </div>
+
+    <!-- Timeline Canvas -->
+    <main class="timeline-section">
+      <div class="timeline-wrapper" id="timeline-wrapper">
+        <div class="timeline-axis" id="timeline-axis"></div>
+        <div class="timeline-track" id="timeline-track"></div>
+        <div class="timeline-empty" id="timeline-empty" hidden>
+          <p>No events match the current filters.</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Detail Card -->
+    <aside class="detail-panel" id="detail-panel" aria-live="polite">
+      <div class="detail-panel__empty" id="detail-empty">
+        <p>Select an event on the timeline to see details.</p>
+      </div>
+      <div class="detail-panel__card" id="detail-card" hidden>
+        <div class="detail-card__nav">
+          <button class="nav-btn" id="nav-prev" aria-label="Previous event">← Prev</button>
+          <div class="detail-card__nav-dropdown">
+            <label for="event-nav-select" class="sr-only">Jump to event</label>
+            <select id="event-nav-select"></select>
+          </div>
+          <button class="nav-btn" id="nav-next" aria-label="Next event">Next →</button>
+        </div>
+        <div class="detail-card__header">
+          <span class="detail-card__kind" id="card-kind"></span>
+          <span class="detail-card__source-badge" id="card-source-badge"></span>
+          <time class="detail-card__time" id="card-time"></time>
+        </div>
+        <h2 class="detail-card__summary" id="card-summary"></h2>
+        <div class="detail-card__meta" id="card-meta"></div>
+        <div class="detail-card__body" id="card-body"></div>
+        <div class="detail-card__payload" id="card-payload-wrapper" hidden>
+          <button class="payload-toggle" id="payload-toggle">Show raw payload ▾</button>
+          <pre class="detail-card__payload-pre" id="card-payload" hidden></pre>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
