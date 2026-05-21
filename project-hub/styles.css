@@ -115,21 +115,16 @@ html, body {
   transition: all var(--t); opacity: .5;
 }
 .filter-btn.active { color: var(--text); border-color: transparent; opacity: 1; }
-
-/* Kind active states */
 .filter-btn[data-filter-kind="expectation"].active { background: rgba(99,102,241,.18); }
 .filter-btn[data-filter-kind="deviation"].active   { background: rgba(245,158,11,.18); }
 .filter-btn[data-filter-kind="adaptation"].active  { background: rgba(16,185,129,.18); }
 .filter-btn[data-filter-kind="insert"].active      { background: rgba(59,130,246,.18); }
 .filter-btn[data-filter-kind="update"].active      { background: rgba(167,139,250,.18); }
 .filter-btn[data-filter-kind="delete"].active      { background: rgba(239,68,68,.18); }
-/* Source active */
-.filter-btn[data-filter-source].active { background: rgba(148,163,184,.1); }
-/* Context active */
-.filter-btn[data-filter-context="production"].active { background: rgba(16,185,129,.12); }
+.filter-btn[data-filter-source].active             { background: rgba(148,163,184,.1); }
+.filter-btn[data-filter-context="production"].active  { background: rgba(16,185,129,.12); }
 .filter-btn[data-filter-context="development"].active { background: rgba(251,191,36,.12); }
 .filter-btn[data-filter-context="test"].active        { background: rgba(52,211,153,.12); }
-
 .filter-btn:hover { opacity: .85; }
 
 /* ============================================================
@@ -156,13 +151,10 @@ html, body {
   min-height: 160px; position: relative; overflow-x: auto;
   transition: border-color .3s ease;
 }
-/* Flash on incoming realtime event */
 .timeline-wrapper--incoming {
   border-color: rgba(16,185,129,.6);
   box-shadow: 0 0 12px rgba(16,185,129,.15);
 }
-
-/* Axis */
 .timeline-axis {
   position: relative; height: 2px;
   background: var(--border); margin: 40px 0 16px; border-radius:1px;
@@ -175,11 +167,7 @@ html, body {
   content:''; display:block; width:1px; height:10px;
   background: var(--border); margin: 4px auto 0;
 }
-
-/* Track */
 .timeline-track { position: relative; min-height: 60px; }
-
-/* Event nodes */
 .timeline-event {
   position: absolute; transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center;
@@ -187,12 +175,8 @@ html, body {
 }
 .timeline-event--auto   { top: -10px; }
 .timeline-event--manual { top: -28px; }
-
-/* Dev / test events: extra offset to clear the ctx label */
 .timeline-event--development { top: -42px; }
 .timeline-event--test        { top: -42px; }
-
-/* Context label (tiny badge above dot) */
 .timeline-event__ctx-label {
   font-size: 9px; font-weight: 700; letter-spacing: .05em;
   text-transform: uppercase; padding: 1px 5px;
@@ -206,31 +190,24 @@ html, body {
   background: rgba(52,211,153,.15); color: var(--c-test);
   border: 1px dashed rgba(52,211,153,.4);
 }
-
-/* Dot shapes */
 .timeline-event__dot {
   width: 14px; height: 14px;
   border-radius: 50%; border: 2px solid var(--bg);
   transition: transform var(--t), box-shadow var(--t); flex-shrink: 0;
 }
 .timeline-event--manual .timeline-event__dot { border-radius: 4px; }
-
-/* Dev/test: dashed outline on the dot */
 .timeline-event--development .timeline-event__dot,
 .timeline-event--test        .timeline-event__dot {
-  outline: 2px dashed currentColor;
-  outline-offset: 3px;
+  outline: 2px dashed currentColor; outline-offset: 3px;
 }
 .timeline-event--development .timeline-event__dot { color: var(--c-dev); }
 .timeline-event--test        .timeline-event__dot { color: var(--c-test); }
-
 .timeline-event__dot--expectation { background: var(--c-expectation); }
 .timeline-event__dot--deviation   { background: var(--c-deviation); }
 .timeline-event__dot--adaptation  { background: var(--c-adaptation); }
 .timeline-event__dot--insert      { background: var(--c-insert); }
 .timeline-event__dot--update      { background: var(--c-update); }
 .timeline-event__dot--delete      { background: var(--c-delete); }
-
 .timeline-event:hover .timeline-event__dot,
 .timeline-event.selected .timeline-event__dot {
   transform: scale(1.5);
@@ -239,20 +216,14 @@ html, body {
 .timeline-event.selected .timeline-event__dot {
   box-shadow: 0 0 0 4px rgba(255,255,255,.3);
 }
-
-.timeline-event__connector {
-  width:1px; background: var(--border); flex-shrink:0;
-}
+.timeline-event__connector { width:1px; background: var(--border); flex-shrink:0; }
 .timeline-event--auto   .timeline-event__connector { height:10px; }
 .timeline-event--manual .timeline-event__connector { height:28px; }
 .timeline-event--development .timeline-event__connector,
 .timeline-event--test        .timeline-event__connector {
   height:40px; border-left: 1px dashed var(--border); width:0;
 }
-
-.timeline-empty {
-  text-align:center; padding:32px 0; color: var(--text-muted);
-}
+.timeline-empty { text-align:center; padding:32px 0; color: var(--text-muted); }
 
 /* ============================================================
    Detail panel
@@ -262,15 +233,11 @@ html, body {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); min-height: 100px;
 }
-.detail-panel__empty {
-  padding:32px; text-align:center; color: var(--text-muted);
-}
-.detail-panel__card { padding:24px; }
+.detail-panel__empty { padding:32px; text-align:center; color: var(--text-muted); }
+.detail-panel__card  { padding:24px; }
 
 /* Nav */
-.detail-card__nav {
-  display:flex; align-items:center; gap:10px; margin-bottom:16px;
-}
+.detail-card__nav { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
 .nav-btn {
   background: var(--surface-2); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -278,7 +245,7 @@ html, body {
   transition: background var(--t), box-shadow var(--t);
   white-space: nowrap;
 }
-.nav-btn:hover { background: var(--border); }
+.nav-btn:hover    { background: var(--border); }
 .nav-btn:disabled { opacity:.35; cursor:not-allowed; }
 .nav-btn--primary {
   background: rgba(99,102,241,.2); color: #a5b4fc;
@@ -289,7 +256,14 @@ html, body {
   box-shadow: 0 0 10px rgba(99,102,241,.25);
 }
 .nav-btn--primary:disabled { opacity:.35; cursor:not-allowed; box-shadow:none; }
-
+.nav-btn--danger {
+  background: rgba(239,68,68,.15); color: #fca5a5;
+  border-color: rgba(239,68,68,.35);
+}
+.nav-btn--danger:hover {
+  background: rgba(239,68,68,.28);
+  box-shadow: 0 0 8px rgba(239,68,68,.2);
+}
 .detail-card__nav-dropdown { flex:1; }
 .detail-card__nav-dropdown select {
   width:100%; background: var(--surface-2); color: var(--text);
@@ -298,9 +272,7 @@ html, body {
 }
 
 /* Card header */
-.detail-card__header {
-  display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;
-}
+.detail-card__header { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
 .detail-card__kind {
   font-size:11px; font-weight:700; letter-spacing:.08em;
   text-transform:uppercase; padding: 3px 8px; border-radius:999px;
@@ -311,7 +283,6 @@ html, body {
 .detail-card__kind--insert      { background:rgba(59,130,246,.2);  color:#93c5fd; }
 .detail-card__kind--update      { background:rgba(167,139,250,.2); color:#c4b5fd; }
 .detail-card__kind--delete      { background:rgba(239,68,68,.2);   color:#fca5a5; }
-
 .detail-card__source-badge {
   font-size:11px; padding: 3px 8px; border-radius:999px;
   border: 1px solid var(--border); color: var(--text-muted);
@@ -319,8 +290,6 @@ html, body {
 .detail-card__source-badge--manual {
   background:rgba(251,191,36,.1); border-color:rgba(251,191,36,.3); color:#fcd34d;
 }
-
-/* Context badge on detail card */
 .detail-card__context-badge {
   font-size:11px; padding: 3px 8px; border-radius:999px;
   border-style: dashed; border-width: 1px;
@@ -331,30 +300,64 @@ html, body {
 .detail-card__context-badge--test {
   background:rgba(52,211,153,.08); border-color:rgba(52,211,153,.4); color: var(--c-test);
 }
-
-.detail-card__time {
-  font-size:12px; color: var(--text-muted); margin-left:auto;
-}
-.detail-card__summary {
-  font-size:18px; font-weight:600; margin-bottom:8px; line-height:1.4;
-}
+.detail-card__time    { font-size:12px; color: var(--text-muted); margin-left:auto; }
+.detail-card__summary { font-size:18px; font-weight:600; margin-bottom:8px; line-height:1.4; }
 .detail-card__meta {
   font-size:12px; color: var(--text-muted); margin-bottom:16px;
   display:flex; gap:16px; flex-wrap:wrap;
 }
 .detail-card__meta span { display:flex; gap:4px; align-items:center; }
-.detail-card__body {
-  font-size:14px; color: var(--text); white-space:pre-wrap; line-height:1.7;
-}
+.detail-card__body { font-size:14px; color: var(--text); white-space:pre-wrap; line-height:1.7; }
+.detail-card__actions { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
 
-/* Card actions row (Annotate button lives here) */
-.detail-card__actions {
-  margin-top: 20px;
-  display: flex; gap: 10px; flex-wrap: wrap;
+/* ============================================================
+   Linked annotations panel
+   ============================================================ */
+.linked-annotations {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.linked-annotations__header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.linked-annotations__header h3 {
+  font-size: 12px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted);
+}
+.linked-annotations__count {
+  font-size: 11px; background: var(--border); color: var(--text-muted);
+  padding: 1px 7px; border-radius: 999px;
+}
+.linked-annotations__list {
+  list-style: none;
+}
+.linked-annotations__item {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--t);
+}
+.linked-annotations__item:last-child { border-bottom: none; }
+.linked-annotations__item:hover { background: var(--surface-2); }
+.linked-annotations__item-summary {
+  flex: 1; font-size: 13px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.linked-annotations__item-time {
+  font-size: 11px; color: var(--text-muted); white-space: nowrap;
+}
+.linked-annotations__item-author {
+  font-size: 11px; color: var(--text-muted); font-style: italic;
 }
 
 /* ============================================================
-   Annotation drawer
+   Annotation drawer (create + edit share base styles)
    ============================================================ */
 .annotation-drawer {
   margin-top: 24px;
@@ -364,29 +367,32 @@ html, body {
   overflow: hidden;
   animation: drawer-in .18s ease;
 }
+.annotation-drawer--edit {
+  border-color: rgba(251,191,36,.3);
+  background: rgba(251,191,36,.04);
+}
 @keyframes drawer-in {
   from { opacity:0; transform: translateY(-6px); }
   to   { opacity:1; transform: translateY(0); }
 }
-
 .annotation-drawer__header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid rgba(99,102,241,.2);
   background: rgba(99,102,241,.08);
 }
-.annotation-drawer__header h3 {
-  font-size: 13px; font-weight: 600; color: #a5b4fc;
+.annotation-drawer--edit .annotation-drawer__header {
+  border-bottom-color: rgba(251,191,36,.2);
+  background: rgba(251,191,36,.07);
 }
+.annotation-drawer__header h3 { font-size: 13px; font-weight: 600; color: #a5b4fc; }
+.annotation-drawer--edit .annotation-drawer__header h3 { color: #fcd34d; }
 .annotation-drawer__close {
   background: none; border: none; color: var(--text-muted);
   font-size: 12px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
   transition: color var(--t), background var(--t);
 }
-.annotation-drawer__close:hover {
-  color: var(--text); background: var(--surface-2);
-}
-
+.annotation-drawer__close:hover { color: var(--text); background: var(--surface-2); }
 .annotation-drawer__linked {
   padding: 8px 16px;
   font-size: 11px; color: var(--text-muted); font-style: italic;
@@ -402,10 +408,7 @@ html, body {
   gap: 12px 16px;
 }
 .annotation-form__full { grid-column: 1 / -1; }
-
-.annotation-form label {
-  display: flex; flex-direction: column; gap: 5px;
-}
+.annotation-form label { display: flex; flex-direction: column; gap: 5px; }
 .annotation-form label > span {
   font-size: 11px; font-weight: 600; letter-spacing: .05em;
   text-transform: uppercase; color: var(--text-muted);
@@ -428,26 +431,37 @@ html, body {
 }
 .annotation-form input::placeholder,
 .annotation-form textarea::placeholder { color: var(--text-muted); opacity:.7; }
-
 .annotation-form__actions {
   grid-column: 1 / -1;
   display: flex; justify-content: flex-end; gap: 8px;
 }
-
 .annotation-form__status {
   grid-column: 1 / -1;
   font-size: 12px; padding: 6px 10px; border-radius: 6px;
   border: 1px solid var(--border);
 }
-.annotation-form__status[data-state="working"] {
-  color: var(--text-muted);
-}
-.annotation-form__status[data-state="ok"] {
+.annotation-form__status[data-state="working"] { color: var(--text-muted); }
+.annotation-form__status[data-state="ok"]    {
   background: rgba(16,185,129,.08); border-color: rgba(16,185,129,.3); color: #6ee7b7;
 }
 .annotation-form__status[data-state="error"] {
   background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.3); color: #fca5a5;
 }
+
+/* ============================================================
+   Delete dialog
+   ============================================================ */
+.delete-dialog {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0; min-width: 320px; max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+}
+.delete-dialog::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+.delete-dialog__inner { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.delete-dialog__inner h3 { font-size: 16px; font-weight: 600; }
+.delete-dialog__inner p  { font-size: 13px; color: var(--text-muted); }
+.delete-dialog__actions  { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* ============================================================
    Payload block
@@ -482,8 +496,7 @@ html, body {
   .timeline-section { padding:14px; }
   .detail-panel { margin:0 14px 24px; }
   .detail-card__time { margin-left:0; }
-  .annotation-form {
-    grid-template-columns: 1fr;
-  }
+  .annotation-form { grid-template-columns: 1fr; }
   .annotation-form__full { grid-column: 1; }
+  .delete-dialog { min-width: 280px; }
 }

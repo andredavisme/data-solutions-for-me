@@ -83,6 +83,17 @@
         <div class="detail-card__meta" id="card-meta"></div>
         <div class="detail-card__body" id="card-body"></div>
         <div class="detail-card__actions" id="card-actions"></div>
+
+        <!-- Linked annotations (shown for automatic events) -->
+        <div class="linked-annotations" id="linked-annotations" hidden>
+          <div class="linked-annotations__header">
+            <h3>Linked annotations</h3>
+            <span class="linked-annotations__count" id="linked-annotations-count"></span>
+          </div>
+          <ul class="linked-annotations__list" id="linked-annotations-list"></ul>
+        </div>
+
+        <!-- Annotate drawer (create new annotation on an automatic event) -->
         <div class="annotation-drawer" id="annotation-drawer" hidden>
           <div class="annotation-drawer__header">
             <h3>Annotate automatic event</h3>
@@ -128,12 +139,72 @@
             <p class="annotation-form__status" id="annotation-status" hidden></p>
           </form>
         </div>
+
+        <!-- Edit drawer (for manual events) -->
+        <div class="annotation-drawer annotation-drawer--edit" id="edit-drawer" hidden>
+          <div class="annotation-drawer__header">
+            <h3>Edit annotation</h3>
+            <button class="annotation-drawer__close" id="edit-cancel" type="button">Cancel</button>
+          </div>
+          <form id="edit-form" class="annotation-form">
+            <label>
+              <span>Kind</span>
+              <select id="edit-kind">
+                <option value="adaptation">adaptation</option>
+                <option value="expectation">expectation</option>
+                <option value="deviation">deviation</option>
+                <option value="insert">insert</option>
+                <option value="update">update</option>
+                <option value="delete">delete</option>
+              </select>
+            </label>
+            <label>
+              <span>Context</span>
+              <select id="edit-context">
+                <option value="production">production</option>
+                <option value="development">development</option>
+                <option value="test">test</option>
+              </select>
+            </label>
+            <label>
+              <span>Author</span>
+              <input id="edit-author" type="text" placeholder="Your name" maxlength="120" />
+            </label>
+            <label>
+              <span>Summary</span>
+              <input id="edit-summary" type="text" placeholder="Short summary" maxlength="240" required />
+            </label>
+            <label class="annotation-form__full">
+              <span>Narrative</span>
+              <textarea id="edit-narrative" rows="5" placeholder="What does this event mean?"></textarea>
+            </label>
+            <div class="annotation-form__actions">
+              <button class="nav-btn nav-btn--danger" type="button" id="edit-delete">Delete</button>
+              <button class="nav-btn nav-btn--primary" type="submit" id="edit-submit">Save changes</button>
+            </div>
+            <p class="annotation-form__status" id="edit-status" hidden></p>
+          </form>
+        </div>
+
         <div class="detail-card__payload" id="card-payload-wrapper" hidden>
           <button class="payload-toggle" id="payload-toggle">Show raw payload ▾</button>
           <pre class="detail-card__payload-pre" id="card-payload" hidden></pre>
         </div>
       </div>
     </aside>
+
+    <!-- Delete confirm dialog -->
+    <dialog class="delete-dialog" id="delete-dialog">
+      <div class="delete-dialog__inner">
+        <h3>Delete annotation?</h3>
+        <p id="delete-dialog-desc">This cannot be undone.</p>
+        <div class="delete-dialog__actions">
+          <button class="nav-btn" id="delete-cancel">Cancel</button>
+          <button class="nav-btn nav-btn--danger" id="delete-confirm">Delete</button>
+        </div>
+        <p class="annotation-form__status" id="delete-status" hidden></p>
+      </div>
+    </dialog>
   </div>
   <script type="module" src="app.js"></script>
 </body>
