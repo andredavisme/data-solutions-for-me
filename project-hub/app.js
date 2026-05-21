@@ -28,7 +28,7 @@ const state = {
   editingEventId: null,
   pendingDeleteId: null,
   filters: {
-    kinds:    new Set(['insert','update','delete','expectation','deviation','adaptation']),
+    kinds:    new Set(['milestone','update','decision','launch','blocker']),
     sources:  new Set(['automatic','manual']),
     contexts: new Set(['production','development','test']),
   },
@@ -104,9 +104,10 @@ loadProjects();
 async function loadProjects() {
   projectTitle.textContent = 'Loading…';
   const { data, error } = await supabase
-    .from('skunkworks_projects')
-    .select('id, title, status')
-    .order('created_at', { ascending: false });
+    .from('hub_projects')
+    .select('id, title, status, description, client, project_type, owner, start_date, target_date, tags')
+    .eq('status', 'active')
+    .order('sort_order', { ascending: true });
   if (error) {
     projectTitle.textContent = `Error: ${error.message}`;
     console.error('loadProjects error', error);
@@ -119,7 +120,7 @@ async function loadProjects() {
     projectSelect.value   = state.activeProjectId;
     await loadEvents();
   } else {
-    projectTitle.textContent = 'No projects found';
+    projectTitle.textContent = 'No active projects found';
   }
 }
 
@@ -143,13 +144,16 @@ projectSelect.addEventListener('change', async () => {
 
 async function loadEvents() {
   const project = state.projects.find(p => p.id === state.activeProjectId);
-  if (project) { projectTitle.textContent = project.title; projectStatus.textContent = project.status ?? ''; }
+  if (project) {
+    projectTitle.textContent = project.title;
+    projectStatus.textContent = project.status ?? '';
+  }
   renderTimelineSkeleton();
   const { data, error } = await supabase
-    .from('project_events')
+    .from('hub_project_events')
     .select('*')
     .eq('project_id', state.activeProjectId)
-    .order('created_at', { ascending: true });
+    .order('event_date', { ascending: true });
   if (error) {
     timelineEmpty.hidden = false;
     timelineEmpty.querySelector('p').textContent = `Failed to load events: ${error.message}`;
@@ -166,9 +170,9 @@ function subscribeRealtime() {
   if (state.realtimeChannel) unsubscribeRealtime();
   setRealtimeBadge('connecting');
   state.realtimeChannel = supabase
-    .channel(`project-events:${state.activeProjectId}`)
+    .channel(`hub-project-events:${state.activeProjectId}`)
     .on('postgres_changes', {
-      event: '*', schema: 'public', table: 'project_events',
+      event: '*', schema: 'public', table: 'hub_project_events',
       filter: `project_id=eq.${state.activeProjectId}`
     }, payload => handleRealtimeEvent(payload))
     .subscribe(status => {
@@ -185,7 +189,7 @@ function unsubscribeRealtime() {
 
 function handleRealtimeEvent({ eventType, new: newRow, old: oldRow }) {
   if (eventType === 'INSERT') {
-    const insertAt = state.allEvents.findIndex(e => new Date(e.created_at) > new Date(newRow.created_at));
+    const insertAt = state.allEvents.findIndex(e => new Date(e.event_date) > new Date(newRow.event_date));
     if (insertAt === -1) state.allEvents.push(newRow);
     else state.allEvents.splice(insertAt, 0, newRow);
     flashTimelineIncoming();
@@ -248,11 +252,7 @@ function setupFilters() {
 
 function applyFiltersAndRender() {
   state.visibleEvents = state.allEvents.filter(ev => {
-    const kindOk   = state.filters.kinds.has(ev.event_kind);
-    const isManual = ev.is_manual === true;
-    const sourceOk = (isManual && state.filters.sources.has('manual')) || (!isManual && state.filters.sources.has('automatic'));
-    const ctx = ev.context ?? 'production';
-    return kindOk && sourceOk && state.filters.contexts.has(ctx);
+    return state.filters.kinds.has(ev.event_type);
   });
   if (state.selectedIndex !== null && state.selectedIndex >= state.visibleEvents.length) {
     state.selectedIndex = state.visibleEvents.length ? state.visibleEvents.length - 1 : null;
@@ -273,34 +273,25 @@ function renderTimeline() {
   const events = state.visibleEvents;
   if (!events.length) { timelineEmpty.hidden = false; return; }
   timelineEmpty.hidden = true;
-  const times  = events.map(e => new Date(e.created_at).getTime());
+  const times  = events.map(e => new Date(e.event_date).getTime());
   const tMin   = Math.min(...times);
   const tMax   = Math.max(...times);
   const tRange = tMax - tMin || 1;
   const wrapW  = $('timeline-wrapper').clientWidth - TIMELINE_PADDING * 2;
   buildAxisTicks(tMin, tMax, wrapW);
   events.forEach((ev, i) => {
-    const leftPx   = TIMELINE_PADDING + (((new Date(ev.created_at).getTime() - tMin) / tRange) * wrapW);
-    const isManual = ev.is_manual === true;
-    const ctx      = ev.context ?? 'production';
-    const isDev    = ctx === 'development' || ctx === 'test';
+    const leftPx = TIMELINE_PADDING + (((new Date(ev.event_date).getTime() - tMin) / tRange) * wrapW);
     const node = document.createElement('div');
-    node.className = ['timeline-event', `timeline-event--${isManual ? 'manual' : 'auto'}`, isDev ? `timeline-event--${ctx}` : ''].filter(Boolean).join(' ');
+    node.className = `timeline-event timeline-event--${ev.event_type}`;
     node.style.left = `${leftPx}px`;
     node.dataset.index = i;
     node.tabIndex = 0;
     const dot = document.createElement('div');
-    dot.className = `timeline-event__dot timeline-event__dot--${ev.event_kind}`;
-    if (isDev) {
-      const label = document.createElement('span');
-      label.className = `timeline-event__ctx-label timeline-event__ctx-label--${ctx}`;
-      label.textContent = ctx === 'development' ? 'dev' : 'test';
-      node.appendChild(label);
-    }
+    dot.className = `timeline-event__dot timeline-event__dot--${ev.event_type}`;
     const connector = document.createElement('div');
     connector.className = 'timeline-event__connector';
-    if (isManual) { node.appendChild(dot); node.appendChild(connector); }
-    else { node.appendChild(connector); node.appendChild(dot); }
+    node.appendChild(connector);
+    node.appendChild(dot);
     if (i === state.selectedIndex) node.classList.add('selected');
     node.addEventListener('click', () => selectEvent(i));
     node.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') selectEvent(i); });
@@ -344,10 +335,9 @@ function showDetailEmpty() { detailEmpty.hidden = false; detailCard.hidden = tru
 function renderDetailNav() {
   eventNavSelect.innerHTML = '';
   state.visibleEvents.forEach((ev, i) => {
-    const ctx = ev.context ?? 'production';
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = [formatTime(ev.created_at), '•', ev.event_kind, ctx !== 'production' ? `[${ctx}]` : '', ev.summary ? '— ' + ev.summary.slice(0, 55) : ''].filter(Boolean).join('  ');
+    opt.textContent = [formatDate(ev.event_date), '•', ev.event_type, ev.title ? '— ' + ev.title.slice(0, 55) : ''].filter(Boolean).join('  ');
     opt.selected = i === state.selectedIndex;
     eventNavSelect.appendChild(opt);
   });
@@ -360,81 +350,35 @@ function renderDetailCard() {
   if (!ev) return showDetailEmpty();
   detailEmpty.hidden = true;
   detailCard.hidden = false;
-  const isManual = ev.is_manual === true;
-  const ctx = ev.context ?? 'production';
-  cardKind.textContent = ev.event_kind;
-  cardKind.className = `detail-card__kind detail-card__kind--${ev.event_kind}`;
-  cardSourceBadge.textContent = isManual ? '✏ Manual' : '⚙ Automatic';
-  cardSourceBadge.className = `detail-card__source-badge${isManual ? ' detail-card__source-badge--manual' : ''}`;
-  if (ctx !== 'production') {
-    cardContextBadge.textContent = ctx === 'development' ? '🛠 dev' : '🧪 test';
-    cardContextBadge.className = `detail-card__context-badge detail-card__context-badge--${ctx}`;
-    cardContextBadge.hidden = false;
-  } else {
-    cardContextBadge.hidden = true;
-  }
-  cardTime.textContent = formatTime(ev.created_at);
-  cardSummary.textContent = ev.summary || `${capitalise(ev.event_kind)} on ${ev.source_type}`;
-  cardMeta.innerHTML = [
-    ev.author ? `<span>✏ <strong>${escHtml(ev.author)}</strong></span>` : '',
-    ev.source_type ? `<span>Table: <strong>${escHtml(ev.source_type)}</strong></span>` : '',
-    ev.status ? `<span>Status: <strong>${escHtml(ev.status)}</strong></span>` : '',
-  ].filter(Boolean).join('');
-  cardBody.textContent = ev.narrative || ev.notes || '';
+  cardKind.textContent = ev.event_type;
+  cardKind.className = `detail-card__kind detail-card__kind--${ev.event_type}`;
+  cardSourceBadge.textContent = '';
+  cardSourceBadge.hidden = true;
+  cardContextBadge.hidden = true;
+  cardTime.textContent = formatDate(ev.event_date);
+  cardSummary.textContent = ev.title || capitalise(ev.event_type);
+  cardMeta.innerHTML = '';
+  cardBody.textContent = ev.body || '';
   renderCardActions(ev);
-  renderLinkedAnnotations(ev);
-  if (ev.payload) {
-    cardPayloadWrap.hidden = false;
-    cardPayload.textContent = JSON.stringify(ev.payload, null, 2);
-  } else {
-    cardPayloadWrap.hidden = true;
-    cardPayload.hidden = true;
-  }
+  if (cardPayloadWrap) cardPayloadWrap.hidden = true;
+  if (linkedPanel) linkedPanel.hidden = true;
 }
 
 function renderCardActions(ev) {
   cardActions.innerHTML = '';
-  if (ev.is_manual === true) {
-    const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'nav-btn'; btn.textContent = '✏ Edit annotation';
-    btn.addEventListener('click', () => openEditDrawer(ev));
-    cardActions.appendChild(btn);
-  } else {
-    const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'nav-btn nav-btn--primary'; btn.textContent = 'Annotate this event';
-    btn.addEventListener('click', () => openAnnotationDrawer(ev));
-    cardActions.appendChild(btn);
-  }
-}
-
-function renderLinkedAnnotations(ev) {
-  linkedList.innerHTML = '';
-  if (ev.is_manual === true) { linkedPanel.hidden = true; return; }
-  const linked = state.allEvents.filter(e => e.is_manual === true && Array.isArray(e.related_event_ids) && e.related_event_ids.includes(ev.id));
-  if (!linked.length) { linkedPanel.hidden = true; return; }
-  linkedPanel.hidden = false;
-  linkedCount.textContent = `${linked.length}`;
-  linked.forEach(ann => {
-    const li = document.createElement('li');
-    li.className = 'linked-annotations__item';
-    li.innerHTML = `
-      <span class="detail-card__kind detail-card__kind--${ann.event_kind}">${escHtml(ann.event_kind)}</span>
-      <span class="linked-annotations__item-summary">${escHtml(ann.summary || '—')}</span>
-      <time class="linked-annotations__item-time">${formatTime(ann.created_at)}</time>
-      ${ann.author ? `<span class="linked-annotations__item-author">${escHtml(ann.author)}</span>` : ''}
-    `;
-    li.addEventListener('click', () => { const idx = state.visibleEvents.findIndex(e => e.id === ann.id); if (idx !== -1) selectEvent(idx); });
-    linkedList.appendChild(li);
-  });
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'nav-btn nav-btn--primary'; btn.textContent = '✏ Edit event';
+  btn.addEventListener('click', () => openEditDrawer(ev));
+  cardActions.appendChild(btn);
 }
 
 function openAnnotationDrawer(ev) {
   closeAllDrawers();
   state.annotationSourceId = ev.id;
   annotationDrawer.hidden = false;
-  annotationLinked.textContent = `${ev.event_kind} • ${formatTime(ev.created_at)} • ${ev.summary || ev.source_type || 'automatic event'}`;
-  annotationKind.value = 'adaptation';
-  annotationContext.value = ev.context ?? 'production';
+  annotationLinked.textContent = `${ev.event_type} • ${formatDate(ev.event_date)} • ${ev.title || 'event'}`;
+  annotationKind.value = 'update';
+  annotationContext.value = 'production';
   annotationSummary.value = '';
   annotationNarrative.value = '';
   annotationStatus.hidden = true;
@@ -451,7 +395,7 @@ function closeAnnotationDrawer() {
 function setupAnnotationForm() {
   annotationCancel.addEventListener('click', closeAnnotationDrawer);
   annotationReset.addEventListener('click', () => {
-    annotationKind.value = 'adaptation'; annotationContext.value = 'production';
+    annotationKind.value = 'update'; annotationContext.value = 'production';
     annotationSummary.value = ''; annotationNarrative.value = ''; annotationStatus.hidden = true;
   });
   annotationForm.addEventListener('submit', async e => {
@@ -463,14 +407,13 @@ function setupAnnotationForm() {
     annotationStatus.textContent = 'Saving…';
     annotationStatus.dataset.state = 'working';
     const row = {
-      project_id: sourceEvent.project_id, event_kind: annotationKind.value,
-      source_type: sourceEvent.source_type || 'other', source_record_id: sourceEvent.source_record_id || null,
-      monitor_event_id: sourceEvent.monitor_event_id || null, status: 'pending', is_manual: true,
-      author: annotationAuthor.value.trim() || null, summary: annotationSummary.value.trim(),
-      narrative: annotationNarrative.value.trim(), notes: `Manual annotation linked to ${sourceEvent.id}`,
-      related_event_ids: [sourceEvent.id], context: annotationContext.value,
+      project_id:  sourceEvent.project_id,
+      event_date:  new Date().toISOString().slice(0, 10),
+      event_type:  annotationKind.value,
+      title:       annotationSummary.value.trim(),
+      body:        annotationNarrative.value.trim() || null,
     };
-    const { data, error } = await supabase.from('project_events').insert(row).select('*').single();
+    const { data, error } = await supabase.from('hub_project_events').insert(row).select('*').single();
     annotationSubmit.disabled = false;
     if (error) { annotationStatus.textContent = error.message; annotationStatus.dataset.state = 'error'; return; }
     state.pendingInsertedAnnotationId = data.id;
@@ -483,11 +426,11 @@ function openEditDrawer(ev) {
   closeAllDrawers();
   state.editingEventId = ev.id;
   editDrawer.hidden = false;
-  editKind.value = ev.event_kind ?? 'adaptation';
-  editContext.value = ev.context ?? 'production';
-  editAuthor.value = ev.author ?? '';
-  editSummary.value = ev.summary ?? '';
-  editNarrative.value = ev.narrative ?? ev.notes ?? '';
+  editKind.value = ev.event_type ?? 'update';
+  editContext.value = 'production';
+  editAuthor.value = '';
+  editSummary.value = ev.title ?? '';
+  editNarrative.value = ev.body ?? '';
   editStatus.hidden = true; editStatus.textContent = '';
   editSummary.focus();
 }
@@ -512,11 +455,11 @@ function setupEditForm() {
     editStatus.textContent = 'Saving…';
     editStatus.dataset.state = 'working';
     const patch = {
-      event_kind: editKind.value, context: editContext.value,
-      author: editAuthor.value.trim() || null, summary: editSummary.value.trim(),
-      narrative: editNarrative.value.trim() || null,
+      event_type: editKind.value,
+      title:      editSummary.value.trim(),
+      body:       editNarrative.value.trim() || null,
     };
-    const { error } = await supabase.from('project_events').update(patch).eq('id', state.editingEventId);
+    const { error } = await supabase.from('hub_project_events').update(patch).eq('id', state.editingEventId);
     editSubmit.disabled = false;
     if (error) { editStatus.textContent = error.message; editStatus.dataset.state = 'error'; return; }
     editStatus.textContent = 'Saved.'; editStatus.dataset.state = 'ok';
@@ -526,7 +469,7 @@ function setupEditForm() {
 
 function openDeleteDialog(ev) {
   state.pendingDeleteId = ev.id;
-  deleteDialogDesc.textContent = `Delete "${ev.summary || ev.event_kind}"? This cannot be undone.`;
+  deleteDialogDesc.textContent = `Delete "${ev.title || ev.event_type}"? This cannot be undone.`;
   deleteStatus.hidden = true; deleteStatus.textContent = '';
   deleteDialog.showModal();
 }
@@ -539,7 +482,7 @@ function setupDeleteDialog() {
     deleteStatus.hidden = false;
     deleteStatus.textContent = 'Deleting…';
     deleteStatus.dataset.state = 'working';
-    const { error } = await supabase.from('project_events').delete().eq('id', state.pendingDeleteId);
+    const { error } = await supabase.from('hub_project_events').delete().eq('id', state.pendingDeleteId);
     deleteConfirm.disabled = false;
     if (error) { deleteStatus.textContent = error.message; deleteStatus.dataset.state = 'error'; return; }
     state.pendingDeleteId = null;
@@ -554,15 +497,17 @@ function setupNavListeners() {
   navPrev.addEventListener('click', () => { if (state.selectedIndex > 0) selectEvent(state.selectedIndex - 1); });
   navNext.addEventListener('click', () => { if (state.selectedIndex < state.visibleEvents.length - 1) selectEvent(state.selectedIndex + 1); });
   eventNavSelect.addEventListener('change', () => selectEvent(Number(eventNavSelect.value)));
-  payloadToggle.addEventListener('click', () => {
-    const open = !cardPayload.hidden;
-    cardPayload.hidden = open;
-    payloadToggle.textContent = open ? 'Show raw payload ▾' : 'Hide raw payload ▴';
-  });
+  if (payloadToggle) {
+    payloadToggle.addEventListener('click', () => {
+      const open = !cardPayload.hidden;
+      cardPayload.hidden = open;
+      payloadToggle.textContent = open ? 'Show raw payload ▾' : 'Hide raw payload ▴';
+    });
+  }
 }
 
-function formatTime(iso) {
-  return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+function formatDate(dateStr) {
+  return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function capitalise(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
