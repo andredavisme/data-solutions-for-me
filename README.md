@@ -2,6 +2,8 @@
 
 Data Solutions for ME — Simplifying data communication for businesses, communities, and individuals through relatable, analogous frameworks. Hosted at datasolutionsforme.com
 
+**Live hub:** [https://andredavisme.github.io/data-solutions-for-me/project-hub/](https://andredavisme.github.io/data-solutions-for-me/project-hub/)
+
 ---
 
 ## Project hub: expectation timeline
@@ -54,6 +56,20 @@ Three independent filter groups — all AND-ed together:
 | Kind | expectation · deviation · adaptation · insert · update · delete |
 | Source | Automatic · Manual |
 | Context | Production · Dev · Test |
+
+### Annotation flow
+
+Selecting an **automatic** event reveals two things in the detail card:
+
+1. **Annotate this event** button — opens a drawer to author a new manual event linked to the automatic one via `related_event_ids`.
+2. **Linked annotations panel** — lists all existing manual events that reference the selected automatic event. Clicking a linked annotation jumps to it on the timeline.
+
+Selecting a **manual** event reveals:
+
+1. **✏ Edit annotation** button — opens an edit drawer pre-filled with the event’s current values. Fields: kind, context, author, summary, narrative.
+2. **Delete** button inside the edit drawer — opens a confirmation dialog before permanently removing the event.
+
+All mutations (create, update, delete) propagate back to the timeline instantly via Realtime.
 
 ### Single-project hub, portfolio-ready
 
@@ -130,6 +146,17 @@ UPDATE cron.job SET active = true  WHERE jobname = 'transform-monitor-events'; -
 
 ---
 
+## Deployment
+
+The hub is deployed via GitHub Actions to GitHub Pages on every push to `main`.
+
+- Workflow: [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)
+- Artifact: repo root (so `project-hub/` is served at `/project-hub/`)
+- Root `index.html` redirects `https://andredavisme.github.io/data-solutions-for-me/` → `project-hub/`
+- Live URL: [https://andredavisme.github.io/data-solutions-for-me/project-hub/](https://andredavisme.github.io/data-solutions-for-me/project-hub/)
+
+---
+
 ## Development roadmap
 
 ### Phase 1: Instrumentation and storage ✅
@@ -156,18 +183,28 @@ UPDATE cron.job SET active = true  WHERE jobname = 'transform-monitor-events'; -
 - [x] Dev/test events rendered with dashed outline, color label above dot, dashed connector, and context badge in detail card.
 - [x] 3 dev-context seed events inserted to verify timeline rendering out of the box.
 
-### Phase 3: Manual event authoring
+### Phase 3: Manual event authoring ✅
 
-- [ ] Add UI controls to create manual events tied to a specific project.
-- [ ] Support creating a manual event directly from an automatic event ("Annotate this event").
-- [ ] Allow linking a manual event to one or more related automatic events via `related_event_ids`.
+- [x] **Annotate this event** button on automatic event cards.
+- [x] Annotation drawer (indigo-tinted) with kind, context, author, summary, and narrative fields.
+- [x] New manual event written to `project_events` with `is_manual: true` and `related_event_ids` pointing to the source automatic event.
+- [x] Realtime round-trip: annotation appears on timeline and detail card auto-navigates to it after insert.
 
-### Phase 4: Aggregator-ready patterns
+### Phase 4: Annotation management ✅
+
+- [x] **Linked annotations panel** on automatic event detail cards — lists all manual events referencing the selected event; clicking jumps to the annotation.
+- [x] **✏ Edit annotation** button on manual event detail cards — opens yellow-tinted edit drawer pre-filled with current values.
+- [x] Edit drawer saves `PATCH` (kind, context, author, summary, narrative) via Supabase; auto-closes on success.
+- [x] **Delete** button in edit drawer — opens a native `<dialog>` confirmation modal before issuing `DELETE`.
+- [x] Realtime DELETE removes the event from the timeline and resets selection gracefully.
+- [x] GitHub Pages deployment via Actions workflow; live at [https://andredavisme.github.io/data-solutions-for-me/project-hub/](https://andredavisme.github.io/data-solutions-for-me/project-hub/).
+
+### Phase 5: Aggregator-ready patterns
 
 - [ ] Define queries and API endpoints for single-project and cross-project event fetching.
 - [ ] Document expectations for a separate aggregator hub.
 
-### Phase 5: Insight layers
+### Phase 6: Insight layers
 
 - [ ] Derive metrics: time from deviation to adaptation, deviation frequency, expectation-change distribution.
 - [ ] Surface metrics alongside the timeline as lightweight overlays or summaries.
