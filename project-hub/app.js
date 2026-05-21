@@ -29,7 +29,9 @@ function buildSupabase(token) {
       detectSessionInUrl: false,
       storageKey: `hub-${crypto.randomUUID()}`,
     },
-    global: { headers: token ? { 'x-hub-token': token } : {} },
+    global: {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
   });
 }
 
@@ -72,7 +74,6 @@ async function attemptLogin(passphrase) {
     storeToken(json.token);
     supabase = buildSupabase(json.token);
     showApp();
-    // Always wire up listeners once, then always (re)load data
     setupApp();
     await loadProjects();
   } catch (err) {
@@ -89,7 +90,7 @@ authGateForm.addEventListener('submit', e => { e.preventDefault(); attemptLogin(
 authSignout.addEventListener('click', () => {
   clearToken();
   unsubscribeRealtime();
-  initialized = false;   // allow re-wiring listeners on next login
+  initialized = false;
   supabase    = null;
   showGate();
 });
@@ -189,7 +190,11 @@ async function loadProjects() {
     .from('skunkworks_projects')
     .select('id, title, status')
     .order('created_at', { ascending: false });
-  if (error) { projectTitle.textContent = 'Error loading projects'; return; }
+  if (error) {
+    projectTitle.textContent = `Error: ${error.message}`;
+    console.error('loadProjects error', error);
+    return;
+  }
   state.projects = data ?? [];
   populateProjectSelect();
   if (state.projects.length > 0) {
@@ -230,7 +235,7 @@ async function loadEvents() {
     .order('created_at', { ascending: true });
   if (error) {
     timelineEmpty.hidden = false;
-    timelineEmpty.querySelector('p').textContent = 'Failed to load events.';
+    timelineEmpty.querySelector('p').textContent = `Failed to load events: ${error.message}`;
     clearTimeline();
     return;
   }
