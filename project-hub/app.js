@@ -4,18 +4,12 @@ const SUPABASE_URL      = 'https://hhyhulqngdkwsxhymmcd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_haKvwV0M7KMj4Qz69M6WGg_KmIfU-aI';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-  },
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
-/* ── Hide gate, show app immediately ────────────────────── */
 document.getElementById('auth-gate').hidden = true;
 document.getElementById('app').hidden = false;
 
-/* ── App state ────────────────────────────────────────────── */
 const state = {
   projects: [],
   activeProjectId: null,
@@ -25,12 +19,9 @@ const state = {
   realtimeChannel: null,
   editingEventId: null,
   pendingDeleteId: null,
-  filters: {
-    kinds: new Set(['milestone','update','decision','launch','blocker']),
-  },
+  filters: { kinds: new Set(['milestone','update','decision','launch','blocker']) },
 };
 
-/* ── DOM refs ──────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 const projectSelect    = $('project-select');
 const projectTitle     = $('project-title');
@@ -51,9 +42,7 @@ const cardMeta         = $('card-meta');
 const cardBody         = $('card-body');
 const cardActions      = $('card-actions');
 const editDrawer       = $('edit-drawer');
-const editForm         = $('edit-form');
 const editKind         = $('edit-kind');
-const editAuthor       = $('edit-author');
 const editSummary      = $('edit-summary');
 const editNarrative    = $('edit-narrative');
 const editSubmit       = $('edit-submit');
@@ -67,28 +56,28 @@ const deleteConfirm    = $('delete-confirm');
 const deleteStatus     = $('delete-status');
 const TIMELINE_PADDING = 40;
 
-/* ── Boot ─────────────────────────────────────────────────── */
 setupFilters();
 setupNavListeners();
-setupEditForm();
+setupEditDrawer();
 setupDeleteDialog();
 loadProjects();
 
-/* ── Data loading ───────────────────────────────────────────── */
+/* ── Data loading ─────────────────────────────────────────── */
 async function loadProjects() {
   projectTitle.textContent = 'Loading…';
   const { data, error } = await supabase
     .from('hub_projects')
-    .select('id, title, status, description, client, project_type, owner, start_date, target_date, tags')
+    .select('id, title, status')
     .eq('status', 'active')
     .order('sort_order', { ascending: true });
-  if (error) {
-    projectTitle.textContent = `Error: ${error.message}`;
-    console.error('loadProjects error', error);
-    return;
-  }
+  if (error) { projectTitle.textContent = `Error: ${error.message}`; return; }
   state.projects = data ?? [];
-  populateProjectSelect();
+  projectSelect.innerHTML = '';
+  state.projects.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id; opt.textContent = p.title;
+    projectSelect.appendChild(opt);
+  });
   if (state.projects.length > 0) {
     state.activeProjectId = state.projects[0].id;
     projectSelect.value   = state.activeProjectId;
@@ -96,16 +85,6 @@ async function loadProjects() {
   } else {
     projectTitle.textContent = 'No active projects found';
   }
-}
-
-function populateProjectSelect() {
-  projectSelect.innerHTML = '';
-  state.projects.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.title;
-    projectSelect.appendChild(opt);
-  });
 }
 
 projectSelect.addEventListener('change', async () => {
@@ -118,43 +97,36 @@ projectSelect.addEventListener('change', async () => {
 
 async function loadEvents() {
   const project = state.projects.find(p => p.id === state.activeProjectId);
-  if (project) {
-    projectTitle.textContent  = project.title;
-    projectStatus.textContent = project.status ?? '';
-  }
-  renderTimelineSkeleton();
+  if (project) { projectTitle.textContent = project.title; projectStatus.textContent = project.status ?? ''; }
+  clearTimeline(); timelineEmpty.hidden = true;
   const { data, error } = await supabase
-    .from('hub_project_events')
-    .select('*')
+    .from('hub_project_events').select('*')
     .eq('project_id', state.activeProjectId)
     .order('event_date', { ascending: true });
   if (error) {
     timelineEmpty.hidden = false;
     timelineEmpty.querySelector('p').textContent = `Failed to load events: ${error.message}`;
-    clearTimeline();
     return;
   }
-  state.allEvents     = data ?? [];
+  state.allEvents = data ?? [];
   state.selectedIndex = null;
   applyFiltersAndRender();
-  // Auto-select first event so detail card is immediately populated
   if (state.visibleEvents.length > 0) selectEvent(0);
   subscribeRealtime();
 }
 
+/* ── Realtime ─────────────────────────────────────────────── */
 function subscribeRealtime() {
   if (state.realtimeChannel) unsubscribeRealtime();
   setRealtimeBadge('connecting');
   state.realtimeChannel = supabase
     .channel(`hub-project-events:${state.activeProjectId}`)
-    .on('postgres_changes', {
-      event: '*', schema: 'public', table: 'hub_project_events',
-      filter: `project_id=eq.${state.activeProjectId}`
-    }, payload => handleRealtimeEvent(payload))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'hub_project_events',
+      filter: `project_id=eq.${state.activeProjectId}` }, payload => handleRealtimeEvent(payload))
     .subscribe(status => {
-      if (status === 'SUBSCRIBED')                               setRealtimeBadge('live');
+      if (status === 'SUBSCRIBED') setRealtimeBadge('live');
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setRealtimeBadge('error');
-      if (status === 'CLOSED')                                   setRealtimeBadge('off');
+      if (status === 'CLOSED') setRealtimeBadge('off');
     });
 }
 
@@ -165,10 +137,8 @@ function unsubscribeRealtime() {
 
 function handleRealtimeEvent({ eventType, new: newRow, old: oldRow }) {
   if (eventType === 'INSERT') {
-    const insertAt = state.allEvents.findIndex(e => e.event_date > newRow.event_date);
-    if (insertAt === -1) state.allEvents.push(newRow);
-    else state.allEvents.splice(insertAt, 0, newRow);
-    flashTimelineIncoming();
+    const at = state.allEvents.findIndex(e => e.event_date > newRow.event_date);
+    if (at === -1) state.allEvents.push(newRow); else state.allEvents.splice(at, 0, newRow);
   }
   if (eventType === 'UPDATE') {
     const idx = state.allEvents.findIndex(e => e.id === newRow.id);
@@ -181,8 +151,7 @@ function handleRealtimeEvent({ eventType, new: newRow, old: oldRow }) {
     if (wasSelected) { state.selectedIndex = null; closeEditDrawer(); }
   }
   applyFiltersAndRender();
-  if (state.selectedIndex !== null) renderDetailCard();
-  else showDetailEmpty();
+  if (state.selectedIndex !== null) renderDetailCard(); else showDetailEmpty();
 }
 
 function setRealtimeBadge(status) {
@@ -191,12 +160,7 @@ function setRealtimeBadge(status) {
   realtimeBadge.dataset.status = status;
 }
 
-function flashTimelineIncoming() {
-  const wrapper = $('timeline-wrapper');
-  wrapper.classList.add('timeline-wrapper--incoming');
-  setTimeout(() => wrapper.classList.remove('timeline-wrapper--incoming'), 600);
-}
-
+/* ── Filters ──────────────────────────────────────────────── */
 function setupFilters() {
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -213,76 +177,54 @@ function setupFilters() {
 
 function applyFiltersAndRender() {
   state.visibleEvents = state.allEvents.filter(ev => state.filters.kinds.has(ev.event_type));
-  if (state.selectedIndex !== null && state.selectedIndex >= state.visibleEvents.length) {
+  if (state.selectedIndex !== null && state.selectedIndex >= state.visibleEvents.length)
     state.selectedIndex = state.visibleEvents.length ? state.visibleEvents.length - 1 : null;
-  }
   renderTimeline();
   renderDetailNav();
 }
 
+/* ── Timeline ─────────────────────────────────────────────── */
 function clearTimeline() { timelineTrack.innerHTML = ''; timelineAxis.innerHTML = ''; }
-
-function renderTimelineSkeleton() {
-  clearTimeline();
-  timelineEmpty.hidden = true;
-  timelineTrack.innerHTML = '<div class="skeleton" style="height:14px;width:200px;margin:20px auto"></div>';
-}
 
 function renderTimeline() {
   clearTimeline();
   const events = state.visibleEvents;
   if (!events.length) { timelineEmpty.hidden = false; return; }
   timelineEmpty.hidden = true;
-
   const wrapW = $('timeline-wrapper').clientWidth - TIMELINE_PADDING * 2;
-
-  // Parse event_date strings as local dates (avoid UTC midnight offset)
   const times = events.map(e => parseDateLocal(e.event_date));
   const tMin  = Math.min(...times);
   const tMax  = Math.max(...times);
-  // If only one event (or all same date), centre it in the track
   const tRange = tMax - tMin || 1;
-  const singleEvent = tMax === tMin;
-
-  buildAxisTicks(tMin, tMax, wrapW, singleEvent);
-
+  const single = tMax === tMin;
+  buildAxisTicks(tMin, tMax, wrapW, single);
   events.forEach((ev, i) => {
     const t      = parseDateLocal(ev.event_date);
-    const leftPx = singleEvent
-      ? TIMELINE_PADDING + wrapW / 2   // centre single event
-      : TIMELINE_PADDING + ((t - tMin) / tRange) * wrapW;
-
+    const leftPx = single ? TIMELINE_PADDING + wrapW / 2 : TIMELINE_PADDING + ((t - tMin) / tRange) * wrapW;
     const node = document.createElement('div');
     node.className = `timeline-event timeline-event--${ev.event_type}`;
     node.style.left = `${leftPx}px`;
-    node.dataset.index = i;
-    node.tabIndex = 0;
-
-    const dot = document.createElement('div');
-    dot.className = `timeline-event__dot timeline-event__dot--${ev.event_type}`;
+    node.dataset.index = i; node.tabIndex = 0;
     const connector = document.createElement('div');
     connector.className = 'timeline-event__connector';
-    node.appendChild(connector);
-    node.appendChild(dot);
-
+    const dot = document.createElement('div');
+    dot.className = `timeline-event__dot timeline-event__dot--${ev.event_type}`;
+    node.appendChild(connector); node.appendChild(dot);
     if (i === state.selectedIndex) node.classList.add('selected');
     node.addEventListener('click', () => selectEvent(i));
     node.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') selectEvent(i); });
     timelineTrack.appendChild(node);
   });
-
   timelineTrack.style.width = `${TIMELINE_PADDING * 2 + wrapW}px`;
 }
 
-// Parse a YYYY-MM-DD string as local midnight (not UTC) to avoid timezone shift
 function parseDateLocal(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).getTime();
 }
 
-function buildAxisTicks(tMin, tMax, wrapW, singleEvent) {
-  if (singleEvent) {
-    // Just show the single date centred
+function buildAxisTicks(tMin, tMax, wrapW, single) {
+  if (single) {
     const tick = document.createElement('div');
     tick.className = 'timeline-axis__tick';
     tick.style.left = `${TIMELINE_PADDING + wrapW / 2}px`;
@@ -293,17 +235,16 @@ function buildAxisTicks(tMin, tMax, wrapW, singleEvent) {
   const intervals = [86400e3, 7*86400e3, 30*86400e3, 90*86400e3, 365*86400e3];
   const range    = tMax - tMin;
   const interval = intervals.find(iv => Math.floor(range / iv) <= 8) ?? intervals.at(-1);
-  const firstTick = Math.ceil(tMin / interval) * interval;
-  for (let t = firstTick; t <= tMax; t += interval) {
-    const leftPx = TIMELINE_PADDING + ((t - tMin) / range) * wrapW;
+  for (let t = Math.ceil(tMin / interval) * interval; t <= tMax; t += interval) {
     const tick = document.createElement('div');
     tick.className = 'timeline-axis__tick';
-    tick.style.left = `${leftPx}px`;
+    tick.style.left = `${TIMELINE_PADDING + ((t - tMin) / range) * wrapW}px`;
     tick.textContent = new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' });
     timelineAxis.appendChild(tick);
   }
 }
 
+/* ── Detail card ──────────────────────────────────────────── */
 function selectEvent(index) {
   state.selectedIndex = index;
   document.querySelectorAll('.timeline-event').forEach((el, i) => el.classList.toggle('selected', i === index));
@@ -319,11 +260,7 @@ function renderDetailNav() {
   state.visibleEvents.forEach((ev, i) => {
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = [
-      formatDate(ev.event_date), '•',
-      capitalise(ev.event_type),
-      ev.title ? '— ' + ev.title.slice(0, 55) : ''
-    ].filter(Boolean).join('  ');
+    opt.textContent = [formatDate(ev.event_date), '•', capitalise(ev.event_type), ev.title ? '— ' + ev.title.slice(0, 55) : ''].filter(Boolean).join('  ');
     opt.selected = i === state.selectedIndex;
     eventNavSelect.appendChild(opt);
   });
@@ -334,44 +271,31 @@ function renderDetailNav() {
 function renderDetailCard() {
   const ev = state.visibleEvents[state.selectedIndex];
   if (!ev) return showDetailEmpty();
-  detailEmpty.hidden = true;
-  detailCard.hidden  = false;
-  cardKind.textContent  = capitalise(ev.event_type);
-  cardKind.className    = `detail-card__kind detail-card__kind--${ev.event_type}`;
-  cardTime.textContent  = formatDate(ev.event_date);
+  detailEmpty.hidden = true; detailCard.hidden = false;
+  cardKind.textContent = capitalise(ev.event_type);
+  cardKind.className   = `detail-card__kind detail-card__kind--${ev.event_type}`;
+  cardTime.textContent = formatDate(ev.event_date);
   cardSummary.textContent = ev.title || capitalise(ev.event_type);
-  cardMeta.innerHTML    = '';
-  cardBody.textContent  = ev.body || '';
-  renderCardActions(ev);
-  const wrap = $('card-payload-wrapper');
-  if (wrap) wrap.hidden = true;
-  const lp = $('linked-annotations');
-  if (lp) lp.hidden = true;
-  const sb = $('card-source-badge');
-  if (sb) sb.hidden = true;
-  const cb = $('card-context-badge');
-  if (cb) cb.hidden = true;
-}
-
-function renderCardActions(ev) {
+  cardMeta.innerHTML = '';
+  cardBody.textContent = ev.body || '';
   cardActions.innerHTML = '';
   const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'nav-btn nav-btn--primary';
-  btn.textContent = '✏ Edit event';
+  btn.type = 'button'; btn.className = 'nav-btn nav-btn--primary'; btn.textContent = '✏ Edit event';
   btn.addEventListener('click', () => openEditDrawer(ev));
   cardActions.appendChild(btn);
+  ['card-payload-wrapper','linked-annotations','card-source-badge','card-context-badge'].forEach(id => {
+    const el = $(id); if (el) el.hidden = true;
+  });
 }
 
+/* ── Edit drawer ──────────────────────────────────────────── */
 function openEditDrawer(ev) {
-  state.editingEventId  = ev.id;
-  editDrawer.hidden     = false;
-  editKind.value        = ev.event_type ?? 'update';
-  editAuthor.value      = '';
-  editSummary.value     = ev.title ?? '';
-  editNarrative.value   = ev.body  ?? '';
-  editStatus.hidden     = true;
-  editStatus.textContent = '';
+  state.editingEventId = ev.id;
+  editDrawer.hidden    = false;
+  editKind.value       = ev.event_type ?? 'update';
+  editSummary.value    = ev.title ?? '';
+  editNarrative.value  = ev.body  ?? '';
+  editStatus.hidden    = true; editStatus.textContent = '';
   editSummary.focus();
 }
 
@@ -381,32 +305,47 @@ function closeEditDrawer() {
   editStatus.hidden    = true;
 }
 
-function setupEditForm() {
+function setupEditDrawer() {
   editCancel.addEventListener('click', closeEditDrawer);
+
   editDelete.addEventListener('click', () => {
     const ev = state.allEvents.find(e => e.id === state.editingEventId);
     if (ev) openDeleteDialog(ev);
   });
-  editForm.addEventListener('submit', async e => {
-    e.preventDefault();
+
+  // Use click on the button directly — avoids form submit quirks with hidden ancestors
+  editSubmit.addEventListener('click', async () => {
     if (!state.editingEventId) return;
-    editSubmit.disabled = true;
-    editStatus.hidden   = false;
+    const title = editSummary.value.trim();
+    if (!title) { editSummary.focus(); return; }
+    editSubmit.disabled  = true;
+    editStatus.hidden    = false;
     editStatus.textContent = 'Saving…';
     editStatus.dataset.state = 'working';
     const patch = {
       event_type: editKind.value,
-      title:      editSummary.value.trim(),
-      body:       editNarrative.value.trim() || null,
+      title,
+      body: editNarrative.value.trim() || null,
     };
+    console.log('Saving patch', patch, 'for id', state.editingEventId);
     const { error } = await supabase.from('hub_project_events').update(patch).eq('id', state.editingEventId);
     editSubmit.disabled = false;
-    if (error) { editStatus.textContent = error.message; editStatus.dataset.state = 'error'; return; }
-    editStatus.textContent = 'Saved.'; editStatus.dataset.state = 'ok';
+    if (error) {
+      console.error('Save error', error);
+      editStatus.textContent = error.message; editStatus.dataset.state = 'error';
+      return;
+    }
+    editStatus.textContent = 'Saved ✓'; editStatus.dataset.state = 'ok';
+    // Optimistically update local state
+    const idx = state.allEvents.findIndex(e => e.id === state.editingEventId);
+    if (idx !== -1) state.allEvents[idx] = { ...state.allEvents[idx], ...patch };
+    applyFiltersAndRender();
+    renderDetailCard();
     setTimeout(closeEditDrawer, 800);
   });
 }
 
+/* ── Delete dialog ────────────────────────────────────────── */
 function openDeleteDialog(ev) {
   state.pendingDeleteId = ev.id;
   deleteDialogDesc.textContent = `Delete "${ev.title || ev.event_type}"? This cannot be undone.`;
@@ -419,9 +358,7 @@ function setupDeleteDialog() {
   deleteConfirm.addEventListener('click', async () => {
     if (!state.pendingDeleteId) return;
     deleteConfirm.disabled = true;
-    deleteStatus.hidden    = false;
-    deleteStatus.textContent = 'Deleting…';
-    deleteStatus.dataset.state = 'working';
+    deleteStatus.hidden = false; deleteStatus.textContent = 'Deleting…'; deleteStatus.dataset.state = 'working';
     const { error } = await supabase.from('hub_project_events').delete().eq('id', state.pendingDeleteId);
     deleteConfirm.disabled = false;
     if (error) { deleteStatus.textContent = error.message; deleteStatus.dataset.state = 'error'; return; }
@@ -431,16 +368,14 @@ function setupDeleteDialog() {
   });
 }
 
+/* ── Nav ──────────────────────────────────────────────────── */
 function setupNavListeners() {
-  navPrev.addEventListener('click', () => {
-    if (state.selectedIndex > 0) selectEvent(state.selectedIndex - 1);
-  });
-  navNext.addEventListener('click', () => {
-    if (state.selectedIndex < state.visibleEvents.length - 1) selectEvent(state.selectedIndex + 1);
-  });
+  navPrev.addEventListener('click', () => { if (state.selectedIndex > 0) selectEvent(state.selectedIndex - 1); });
+  navNext.addEventListener('click', () => { if (state.selectedIndex < state.visibleEvents.length - 1) selectEvent(state.selectedIndex + 1); });
   eventNavSelect.addEventListener('change', () => selectEvent(Number(eventNavSelect.value)));
 }
 
+/* ── Utils ────────────────────────────────────────────────── */
 function formatDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
