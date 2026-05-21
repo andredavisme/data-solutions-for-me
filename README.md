@@ -16,44 +16,48 @@ Each project hub is responsible for one project. A separate, future aggregator h
 - **Deviation**: A meaningful divergence from an expectation (slip, surprise, risk materialized).
 - **Adaptation**: A conscious response to a deviation (re-scoping, resequencing, new approach).
 
-These are recorded as timestamped events and visualized on a timeline.
+These are recorded as timestamped events and visualized on a live-updating timeline.
 
 ### Timeline view
 
-The hub exposes a timeline where each point represents an expectation, deviation, or adaptation event. Key behaviors:
+The hub exposes a timeline where each point represents an event. Key behaviors:
 
-- X-axis is calendar time from project inception to now, minute-level granularity for events.
+- X-axis is calendar time from project inception to now, minute-level granularity.
 - Multiple events on the same day appear as distinct points, positioned by timestamp.
-- Selecting a point highlights it on the timeline and opens a detail card below.
-- The detail card shows timestamp, event type (expectation/deviation/adaptation), short summary, and a more complete narrative or diff.
-- Users can navigate within the current time window via **next**, **previous**, and a **dropdown** of visible events.
+- Selecting a point opens a detail card below.
+- The detail card shows timestamp, event kind, source badge, context badge, summary, meta, and a full narrative or diff body.
+- Users navigate with **← Prev / Next →** buttons or a **dropdown** of all visible events.
+- The timeline updates **live** via Supabase Realtime — no page refresh needed.
 
 ### Automatic vs manual events
 
-Events in the hub come from two sources:
+Events come from two sources:
 
-- **Automatic events**: Generated from data changes in watched tables (for example, `analogies` and `datasources`) via Supabase triggers and webhooks.
-- **Manual events**: Authored by humans to describe expectations, deviations, or adaptations in narrative form.
+- **Automatic events**: Generated from data changes in watched tables (`analogies`, `datasources`) via Supabase triggers → `monitor_events` → `project_events`. Rendered as **circles** sitting on the axis line.
+- **Manual events**: Authored by humans to document expectations, deviations, or adaptations in narrative form. Rendered as **squares** positioned above the axis line.
 
-Both appear together on the same timeline but are clearly distinguished in the UI:
+Manual events can reference one or more automatic events via `related_event_ids`, effectively annotating system-level signals with human interpretation.
 
-- Automatic events use a neutral visual style (e.g., smaller, muted points) and show their origin table and change payload.
-- Manual events use an accent style (e.g., different shape or color) and highlight the author and intent.
+### Event context
 
-Manual events can reference one or more automatic events for context, effectively annotating the system-level signal with human interpretation.
+Every event carries a `context` field: `production`, `development`, or `test`.
+
+- **Production** events are the canonical record.
+- **Development** and **test** events are visible on the timeline but rendered with a dashed outline, a colored label above the dot, and a dashed context badge in the detail card. They can be toggled off via the Context filter group.
+
+### Filters
+
+Three independent filter groups — all AND-ed together:
+
+| Group | Options |
+|---|---|
+| Kind | expectation · deviation · adaptation · insert · update · delete |
+| Source | Automatic · Manual |
+| Context | Production · Dev · Test |
 
 ### Single-project hub, portfolio-ready
 
-This hub is designed to serve **one project** at a time:
-
-- All events are scoped by `project_id`.
-- The timeline, filters, and detail views operate within a single project context.
-
-A future aggregator hub can:
-
-- Query events across multiple `project_id` values.
-- Build portfolio timelines, deviation heatmaps, and adaptation-lag metrics.
-- Keep each project hub independent while offering cross-project insight.
+All events are scoped by `project_id`. A future aggregator hub can query across multiple project IDs for portfolio timelines, deviation heatmaps, and adaptation-lag metrics.
 
 ---
 
@@ -61,11 +65,11 @@ A future aggregator hub can:
 
 ### `monitor_events` (raw instrumentation)
 
-Captures every trigger-fired change from watched tables (`analogies`, `datasources`). Fields include `table_name`, `event_type` (`INSERT` / `UPDATE` / `DELETE`), `payload` (jsonb), and `status` (`pending` → `handled` / `seen`).
+Captures every trigger-fired change from watched tables. Fields: `table_name`, `event_type` (`INSERT` / `UPDATE` / `DELETE`), `payload` (jsonb), `status` (`pending` → `handled` / `seen`).
 
 ### `project_events` (normalized, project-scoped)
 
-The canonical event store consumed by the timeline UI. Created in Phase 1 (May 2026).
+The canonical event store consumed by the timeline UI.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -73,12 +77,18 @@ The canonical event store consumed by the timeline UI. Created in Phase 1 (May 2
 | `project_id` | `uuid` → `skunkworks_projects` | Scopes every event to a project |
 | `event_kind` | enum | `insert` \| `update` \| `delete` \| `expectation` \| `deviation` \| `adaptation` |
 | `source_type` | enum | `analogies` \| `datasources` \| `monitor_events` \| `other` |
-| `source_record_id` | `uuid` (nullable) | Points to the originating row in the source table |
+| `source_record_id` | `uuid` (nullable) | Points to the originating row in source table |
 | `monitor_event_id` | `uuid` → `monitor_events` | Links back to the raw monitor event |
 | `payload` | `jsonb` | Snapshot or delta from the originating monitor event |
 | `status` | `text` | `pending` \| `processed` \| `ignored` |
 | `notes` | `text` | Optional annotation |
 | `created_at` | `timestamptz` | Auto-set on insert |
+| `is_manual` | `boolean` | `true` = human-authored; `false` = auto-generated |
+| `author` | `text` (nullable) | Author name for manual events |
+| `summary` | `text` (nullable) | Short summary shown on timeline dropdown and detail card |
+| `narrative` | `text` (nullable) | Full narrative body shown in detail card |
+| `related_event_ids` | `uuid[]` | UUIDs of automatic events this manual event annotates |
+| `context` | `text` | `production` \| `development` \| `test` (default `production`) |
 
 **Promotion rules** (how raw event types map to event kinds):
 - `INSERT` → `expectation`
@@ -88,10 +98,10 @@ The canonical event store consumed by the timeline UI. Created in Phase 1 (May 2
 
 ### `transform-monitor-events` Edge Function
 
-Background job that drains `monitor_events` (status = `pending`) and writes normalized rows into `project_events`. Marks processed monitor events as `handled`; unresolvable ones (no `project_id`) as `seen`.
+Background job that drains `monitor_events` (status = `pending`) and writes normalized rows into `project_events`. Marks processed monitor events as `handled`; unresolvable ones as `seen`.
 
 - Batches up to 100 events per invocation.
-- Returns a JSON summary: `{ total, processed, skipped, errors }`.
+- Returns `{ total, processed, skipped, errors }`.
 - Triggered automatically via `pg_cron` every 5 minutes.
 
 **Manual invocation:**
@@ -122,52 +132,53 @@ UPDATE cron.job SET active = true  WHERE jobname = 'transform-monitor-events'; -
 
 ## Development roadmap
 
-This section outlines an initial roadmap for implementing and iterating on the project hub.
-
 ### Phase 1: Instrumentation and storage ✅
 
-- [x] Define and create watched tables for content and sources (e.g., `analogies`, `datasources`).
-- [x] Attach triggers and an Edge Function to record change events into a central events table (e.g., `monitor_events`).
-- [x] Introduce a normalized `project_events` table that scopes events by `project_id`, event kind, and source type.
-- [x] Implement a background job or function to transform raw monitor events into project events (auto expectation/deviation/adaptation candidates).
+- [x] Define and create watched tables (`analogies`, `datasources`).
+- [x] Attach triggers and an Edge Function to record change events into `monitor_events`.
+- [x] Introduce `project_events` scoped by `project_id`, event kind, and source type.
+- [x] Implement background job (`transform-monitor-events`) to promote raw monitor events to project events.
 
-### Phase 2: Project hub UI (single project)
+### Phase 2: Project hub UI (single project) ✅
 
-- [ ] Build a project hub page that:
-  - Shows the expectation timeline for a selected project.
-  - Renders automatic and manual events with distinct visual treatments.
-  - Provides a detail card for the selected event with navigation (next/previous/dropdown).
-- [ ] Add filters to toggle visibility of expectations, deviations, and adaptations.
-- [ ] Add filters to toggle automatic vs manual events.
+- [x] Build project hub page (`project-hub/`):
+  - [x] Expectation timeline for a selected project.
+  - [x] Automatic events (circles on axis) and manual events (squares above axis) with distinct visual treatments.
+  - [x] Detail card with kind badge, source badge, context badge, summary, meta, narrative body, and collapsible raw payload.
+  - [x] Prev / Next navigation buttons and dropdown jump-to-event selector.
+- [x] Filter bar — Kind group (expectation · deviation · adaptation · insert · update · delete).
+- [x] Filter bar — Source group (Automatic · Manual).
+- [x] Filter bar — Context group (Production · Dev · Test).
+- [x] Supabase Realtime subscription — live INSERT / UPDATE / DELETE without page refresh.
+- [x] Live status badge (● Connecting → ● Live → ● Error) in header.
+- [x] Flash animation on timeline wrapper when a new event arrives via realtime.
+- [x] `context` column on `project_events` (`production` | `development` | `test`).
+- [x] Dev/test events rendered with dashed outline, color label above dot, dashed connector, and context badge in detail card.
+- [x] 3 dev-context seed events inserted to verify timeline rendering out of the box.
 
 ### Phase 3: Manual event authoring
 
 - [ ] Add UI controls to create manual events tied to a specific project.
 - [ ] Support creating a manual event directly from an automatic event ("Annotate this event").
-- [ ] Allow linking a manual event to one or more related automatic events.
+- [ ] Allow linking a manual event to one or more related automatic events via `related_event_ids`.
 
 ### Phase 4: Aggregator-ready patterns
 
-- [ ] Ensure project events include a stable `project_id` reference (e.g., to `skunkworks_projects`).
-- [ ] Define queries and API endpoints that:
-  - Fetch events for a single project.
-  - Fetch events across multiple projects with filters by event kind, source type, and time range.
-- [ ] Document expectations for a separate aggregator hub to consume this data.
+- [ ] Define queries and API endpoints for single-project and cross-project event fetching.
+- [ ] Document expectations for a separate aggregator hub.
 
 ### Phase 5: Insight layers
 
-- [ ] Derive metrics such as:
-  - Time from deviation to adaptation.
-  - Frequency and clustering of deviations over time.
-  - Distribution of expectation changes by project phase.
-- [ ] Surface these metrics alongside the timeline as lightweight overlays or summaries.
+- [ ] Derive metrics: time from deviation to adaptation, deviation frequency, expectation-change distribution.
+- [ ] Surface metrics alongside the timeline as lightweight overlays or summaries.
 
 ---
 
 ## Contribution notes
 
-For now, the focus is on getting one project hub fully functional end-to-end. Changes that affect the event schema or the timeline behavior should:
+Changes that affect the event schema or timeline behavior should:
 
 - Preserve the distinction between automatic and manual events.
+- Preserve the `context` field — never write `development` or `test` rows to production without intent.
 - Maintain minute-level timestamp accuracy.
 - Keep the single-project hub interface intuitive, even as portfolio-level capabilities are added later.
