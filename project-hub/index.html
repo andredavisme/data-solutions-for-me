@@ -8,6 +8,7 @@
 </head>
 <body>
   <div id="app">
+
     <!-- Header -->
     <header class="hub-header">
       <div class="hub-header__inner">
@@ -16,17 +17,22 @@
           <h1 class="hub-header__title" id="project-title">Loading…</h1>
           <span class="hub-header__status" id="project-status"></span>
         </div>
-        <div class="hub-header__project-picker">
-          <label for="project-select" class="sr-only">Select project</label>
-          <select id="project-select"></select>
+        <div class="hub-header__right">
+          <span class="realtime-badge" id="realtime-badge" data-status="off">○ Off</span>
+          <div class="hub-header__project-picker">
+            <label for="project-select" class="sr-only">Select project</label>
+            <select id="project-select"></select>
+          </div>
         </div>
       </div>
     </header>
 
     <!-- Filter Bar -->
     <div class="filter-bar" role="toolbar" aria-label="Timeline filters">
+
+      <!-- Event kind -->
       <div class="filter-bar__group">
-        <span class="filter-bar__group-label">Event type</span>
+        <span class="filter-bar__group-label">Kind</span>
         <button class="filter-btn active" data-filter-kind="expectation" aria-pressed="true">
           <span class="dot dot--expectation"></span> Expectation
         </button>
@@ -46,14 +52,33 @@
           <span class="dot dot--delete"></span> Delete
         </button>
       </div>
+
       <div class="filter-bar__divider" aria-hidden="true"></div>
+
+      <!-- Source -->
       <div class="filter-bar__group">
         <span class="filter-bar__group-label">Source</span>
         <button class="filter-btn active" data-filter-source="automatic" aria-pressed="true">
-          <span class="icon-auto" aria-hidden="true">⚙</span> Automatic
+          <span aria-hidden="true">⚙</span> Automatic
         </button>
         <button class="filter-btn active" data-filter-source="manual" aria-pressed="true">
-          <span class="icon-manual" aria-hidden="true">✏</span> Manual
+          <span aria-hidden="true">✏</span> Manual
+        </button>
+      </div>
+
+      <div class="filter-bar__divider" aria-hidden="true"></div>
+
+      <!-- Context -->
+      <div class="filter-bar__group">
+        <span class="filter-bar__group-label">Context</span>
+        <button class="filter-btn active" data-filter-context="production" aria-pressed="true">
+          <span aria-hidden="true">🟢</span> Production
+        </button>
+        <button class="filter-btn active filter-btn--dev" data-filter-context="development" aria-pressed="true">
+          <span aria-hidden="true">🛠</span> Dev
+        </button>
+        <button class="filter-btn active filter-btn--test" data-filter-context="test" aria-pressed="true">
+          <span aria-hidden="true">🧪</span> Test
         </button>
       </div>
     </div>
@@ -86,6 +111,7 @@
         <div class="detail-card__header">
           <span class="detail-card__kind" id="card-kind"></span>
           <span class="detail-card__source-badge" id="card-source-badge"></span>
+          <span class="detail-card__context-badge" id="card-context-badge" hidden></span>
           <time class="detail-card__time" id="card-time"></time>
         </div>
         <h2 class="detail-card__summary" id="card-summary"></h2>
@@ -97,8 +123,8 @@
         </div>
       </div>
     </aside>
-  </div>
 
+  </div>
   <script type="module" src="app.js"></script>
 </body>
 </html>
