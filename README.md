@@ -57,16 +57,79 @@ A future aggregator hub can:
 
 ---
 
+## Data architecture
+
+### `monitor_events` (raw instrumentation)
+
+Captures every trigger-fired change from watched tables (`analogies`, `datasources`). Fields include `table_name`, `event_type` (`INSERT` / `UPDATE` / `DELETE`), `payload` (jsonb), and `status` (`pending` → `handled` / `seen`).
+
+### `project_events` (normalized, project-scoped)
+
+The canonical event store consumed by the timeline UI. Created in Phase 1 (May 2026).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` | Primary key |
+| `project_id` | `uuid` → `skunkworks_projects` | Scopes every event to a project |
+| `event_kind` | enum | `insert` \| `update` \| `delete` \| `expectation` \| `deviation` \| `adaptation` |
+| `source_type` | enum | `analogies` \| `datasources` \| `monitor_events` \| `other` |
+| `source_record_id` | `uuid` (nullable) | Points to the originating row in the source table |
+| `monitor_event_id` | `uuid` → `monitor_events` | Links back to the raw monitor event |
+| `payload` | `jsonb` | Snapshot or delta from the originating monitor event |
+| `status` | `text` | `pending` \| `processed` \| `ignored` |
+| `notes` | `text` | Optional annotation |
+| `created_at` | `timestamptz` | Auto-set on insert |
+
+**Promotion rules** (how raw event types map to event kinds):
+- `INSERT` → `expectation`
+- `UPDATE` with a status field change → `deviation`
+- `UPDATE` without a status change → `adaptation`
+- `DELETE` → `delete`
+
+### `transform-monitor-events` Edge Function
+
+Background job that drains `monitor_events` (status = `pending`) and writes normalized rows into `project_events`. Marks processed monitor events as `handled`; unresolvable ones (no `project_id`) as `seen`.
+
+- Batches up to 100 events per invocation.
+- Returns a JSON summary: `{ total, processed, skipped, errors }`.
+- Triggered automatically via `pg_cron` every 5 minutes.
+
+**Manual invocation:**
+```bash
+curl -X POST https://hhyhulqngdkwsxhymmcd.supabase.co/functions/v1/transform-monitor-events
+```
+
+### `pg_cron` schedule
+
+Job name: `transform-monitor-events` | Schedule: `*/5 * * * *`
+
+```sql
+-- Check job
+SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'transform-monitor-events';
+
+-- Check run history
+SELECT jobid, status, start_time, end_time, return_message
+FROM cron.job_run_details
+WHERE job_name = 'transform-monitor-events'
+ORDER BY start_time DESC LIMIT 10;
+
+-- Pause / resume
+UPDATE cron.job SET active = false WHERE jobname = 'transform-monitor-events'; -- pause
+UPDATE cron.job SET active = true  WHERE jobname = 'transform-monitor-events'; -- resume
+```
+
+---
+
 ## Development roadmap
 
 This section outlines an initial roadmap for implementing and iterating on the project hub.
 
-### Phase 1: Instrumentation and storage
+### Phase 1: Instrumentation and storage ✅
 
 - [x] Define and create watched tables for content and sources (e.g., `analogies`, `datasources`).
 - [x] Attach triggers and an Edge Function to record change events into a central events table (e.g., `monitor_events`).
-- [ ] Introduce a normalized `project_events` table that scopes events by `project_id`, event kind, and source type.
-- [ ] Implement a background job or function to transform raw monitor events into project events (auto expectation/deviation/adaptation candidates).
+- [x] Introduce a normalized `project_events` table that scopes events by `project_id`, event kind, and source type.
+- [x] Implement a background job or function to transform raw monitor events into project events (auto expectation/deviation/adaptation candidates).
 
 ### Phase 2: Project hub UI (single project)
 
