@@ -21,13 +21,14 @@ function getStoredToken() {
 function storeToken(token) { localStorage.setItem(TOKEN_KEY, token); }
 function clearToken()      { localStorage.removeItem(TOKEN_KEY); }
 
+// Each call gets its own unique storageKey so GoTrueClient never sees a duplicate
 function buildSupabase(token) {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
-      storageKey: 'project-hub-noauth',
+      storageKey: `hub-${crypto.randomUUID()}`,
     },
     global: { headers: token ? { 'x-hub-token': token } : {} },
   });
@@ -56,9 +57,6 @@ function showApp() {
   authGate.hidden = true;
   appDiv.hidden   = false;
 }
-function ensureSupabase(token) {
-  supabase = buildSupabase(token);
-}
 
 async function attemptLogin(passphrase) {
   authGateBtn.disabled    = true;
@@ -73,7 +71,7 @@ async function attemptLogin(passphrase) {
     const json = await res.json();
     if (!res.ok || !json.token) throw new Error(json.error || 'Incorrect passphrase');
     storeToken(json.token);
-    ensureSupabase(json.token);
+    supabase = buildSupabase(json.token);
     showApp();
     init();
   } catch (err) {
@@ -114,7 +112,7 @@ const state = {
   },
 };
 
-/* ── DOM refs (must be declared before boot block) ────────── */
+/* ── DOM refs ──────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 const projectSelect       = $('project-select');
 const projectTitle        = $('project-title');
@@ -475,16 +473,12 @@ function renderCardActions(ev) {
   cardActions.innerHTML = '';
   if (ev.is_manual === true) {
     const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'nav-btn';
-    btn.textContent = '✏ Edit annotation';
+    btn.type = 'button'; btn.className = 'nav-btn'; btn.textContent = '✏ Edit annotation';
     btn.addEventListener('click', () => openEditDrawer(ev));
     cardActions.appendChild(btn);
   } else {
     const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'nav-btn nav-btn--primary';
-    btn.textContent = 'Annotate this event';
+    btn.type = 'button'; btn.className = 'nav-btn nav-btn--primary'; btn.textContent = 'Annotate this event';
     btn.addEventListener('click', () => openAnnotationDrawer(ev));
     cardActions.appendChild(btn);
   }
@@ -534,11 +528,8 @@ function closeAnnotationDrawer() {
 function setupAnnotationForm() {
   annotationCancel.addEventListener('click', closeAnnotationDrawer);
   annotationReset.addEventListener('click', () => {
-    annotationKind.value = 'adaptation';
-    annotationContext.value = 'production';
-    annotationSummary.value = '';
-    annotationNarrative.value = '';
-    annotationStatus.hidden = true;
+    annotationKind.value = 'adaptation'; annotationContext.value = 'production';
+    annotationSummary.value = ''; annotationNarrative.value = ''; annotationStatus.hidden = true;
   });
   annotationForm.addEventListener('submit', async e => {
     e.preventDefault();
@@ -549,27 +540,16 @@ function setupAnnotationForm() {
     annotationStatus.textContent = 'Saving…';
     annotationStatus.dataset.state = 'working';
     const row = {
-      project_id: sourceEvent.project_id,
-      event_kind: annotationKind.value,
-      source_type: sourceEvent.source_type || 'other',
-      source_record_id: sourceEvent.source_record_id || null,
-      monitor_event_id: sourceEvent.monitor_event_id || null,
-      status: 'pending',
-      is_manual: true,
-      author: annotationAuthor.value.trim() || null,
-      summary: annotationSummary.value.trim(),
-      narrative: annotationNarrative.value.trim(),
-      notes: `Manual annotation linked to ${sourceEvent.id}`,
-      related_event_ids: [sourceEvent.id],
-      context: annotationContext.value,
+      project_id: sourceEvent.project_id, event_kind: annotationKind.value,
+      source_type: sourceEvent.source_type || 'other', source_record_id: sourceEvent.source_record_id || null,
+      monitor_event_id: sourceEvent.monitor_event_id || null, status: 'pending', is_manual: true,
+      author: annotationAuthor.value.trim() || null, summary: annotationSummary.value.trim(),
+      narrative: annotationNarrative.value.trim(), notes: `Manual annotation linked to ${sourceEvent.id}`,
+      related_event_ids: [sourceEvent.id], context: annotationContext.value,
     };
     const { data, error } = await supabase.from('project_events').insert(row).select('*').single();
     annotationSubmit.disabled = false;
-    if (error) {
-      annotationStatus.textContent = error.message;
-      annotationStatus.dataset.state = 'error';
-      return;
-    }
+    if (error) { annotationStatus.textContent = error.message; annotationStatus.dataset.state = 'error'; return; }
     state.pendingInsertedAnnotationId = data.id;
     annotationStatus.textContent = 'Saved. Waiting for live event…';
     annotationStatus.dataset.state = 'ok';
@@ -585,8 +565,7 @@ function openEditDrawer(ev) {
   editAuthor.value = ev.author ?? '';
   editSummary.value = ev.summary ?? '';
   editNarrative.value = ev.narrative ?? ev.notes ?? '';
-  editStatus.hidden = true;
-  editStatus.textContent = '';
+  editStatus.hidden = true; editStatus.textContent = '';
   editSummary.focus();
 }
 
@@ -610,21 +589,14 @@ function setupEditForm() {
     editStatus.textContent = 'Saving…';
     editStatus.dataset.state = 'working';
     const patch = {
-      event_kind: editKind.value,
-      context: editContext.value,
-      author: editAuthor.value.trim() || null,
-      summary: editSummary.value.trim(),
+      event_kind: editKind.value, context: editContext.value,
+      author: editAuthor.value.trim() || null, summary: editSummary.value.trim(),
       narrative: editNarrative.value.trim() || null,
     };
     const { error } = await supabase.from('project_events').update(patch).eq('id', state.editingEventId);
     editSubmit.disabled = false;
-    if (error) {
-      editStatus.textContent = error.message;
-      editStatus.dataset.state = 'error';
-      return;
-    }
-    editStatus.textContent = 'Saved.';
-    editStatus.dataset.state = 'ok';
+    if (error) { editStatus.textContent = error.message; editStatus.dataset.state = 'error'; return; }
+    editStatus.textContent = 'Saved.'; editStatus.dataset.state = 'ok';
     setTimeout(closeEditDrawer, 800);
   });
 }
@@ -632,8 +604,7 @@ function setupEditForm() {
 function openDeleteDialog(ev) {
   state.pendingDeleteId = ev.id;
   deleteDialogDesc.textContent = `Delete "${ev.summary || ev.event_kind}"? This cannot be undone.`;
-  deleteStatus.hidden = true;
-  deleteStatus.textContent = '';
+  deleteStatus.hidden = true; deleteStatus.textContent = '';
   deleteDialog.showModal();
 }
 
@@ -647,11 +618,7 @@ function setupDeleteDialog() {
     deleteStatus.dataset.state = 'working';
     const { error } = await supabase.from('project_events').delete().eq('id', state.pendingDeleteId);
     deleteConfirm.disabled = false;
-    if (error) {
-      deleteStatus.textContent = error.message;
-      deleteStatus.dataset.state = 'error';
-      return;
-    }
+    if (error) { deleteStatus.textContent = error.message; deleteStatus.dataset.state = 'error'; return; }
     state.pendingDeleteId = null;
     deleteDialog.close();
     closeEditDrawer();
@@ -678,9 +645,9 @@ function capitalise(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 /* ── Boot (must be last — after all const declarations) ───── */
-const token = getStoredToken();
-if (token) {
-  ensureSupabase(token);
+const _bootToken = getStoredToken();
+if (_bootToken) {
+  supabase = buildSupabase(_bootToken);
   showApp();
   init();
 } else {
