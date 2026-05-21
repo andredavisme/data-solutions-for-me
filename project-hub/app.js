@@ -23,11 +23,18 @@ function clearToken()      { localStorage.removeItem(TOKEN_KEY); }
 
 function buildSupabase(token) {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: 'project-hub-noauth',
+    },
     global: { headers: token ? { 'x-hub-token': token } : {} },
   });
 }
 
-let supabase = buildSupabase(getStoredToken());
+let supabase = null;
+let initialized = false;
 
 /* ── Gate UI refs ─────────────────────────────────────────── */
 const authGate      = document.getElementById('auth-gate');
@@ -49,6 +56,9 @@ function showApp() {
   authGate.hidden = true;
   appDiv.hidden   = false;
 }
+function ensureSupabase(token) {
+  supabase = buildSupabase(token);
+}
 
 async function attemptLogin(passphrase) {
   authGateBtn.disabled    = true;
@@ -63,7 +73,7 @@ async function attemptLogin(passphrase) {
     const json = await res.json();
     if (!res.ok || !json.token) throw new Error(json.error || 'Incorrect passphrase');
     storeToken(json.token);
-    supabase = buildSupabase(json.token);
+    ensureSupabase(json.token);
     showApp();
     init();
   } catch (err) {
@@ -77,7 +87,13 @@ async function attemptLogin(passphrase) {
 }
 
 authGateForm.addEventListener('submit', e => { e.preventDefault(); attemptLogin(authGateInput.value); });
-authSignout.addEventListener('click', () => { clearToken(); supabase = buildSupabase(null); showGate(); });
+authSignout.addEventListener('click', () => {
+  clearToken();
+  unsubscribeRealtime();
+  initialized = false;
+  supabase = null;
+  showGate();
+});
 
 /* ── App state ────────────────────────────────────────────── */
 const state = {
@@ -158,6 +174,8 @@ const TIMELINE_PADDING    = 40;
 
 /* ── App functions ────────────────────────────────────────── */
 function init() {
+  if (initialized) return;
+  initialized = true;
   setupFilters();
   setupNavListeners();
   setupAnnotationForm();
@@ -240,7 +258,7 @@ function subscribeRealtime() {
 }
 
 function unsubscribeRealtime() {
-  if (state.realtimeChannel) { supabase.removeChannel(state.realtimeChannel); state.realtimeChannel = null; }
+  if (state.realtimeChannel && supabase) { supabase.removeChannel(state.realtimeChannel); state.realtimeChannel = null; }
   setRealtimeBadge('off');
 }
 
@@ -311,13 +329,13 @@ function applyFiltersAndRender() {
   state.visibleEvents = state.allEvents.filter(ev => {
     const kindOk   = state.filters.kinds.has(ev.event_kind);
     const isManual = ev.is_manual === true;
-    const sourceOk = (isManual && state.filters.sources.has('manual')) ||
-                     (!isManual && state.filters.sources.has('automatic'));
+    const sourceOk = (isManual && state.filters.sources.has('manual')) || (!isManual && state.filters.sources.has('automatic'));
     const ctx = ev.context ?? 'production';
     return kindOk && sourceOk && state.filters.contexts.has(ctx);
   });
-  if (state.selectedIndex !== null && state.selectedIndex >= state.visibleEvents.length)
+  if (state.selectedIndex !== null && state.selectedIndex >= state.visibleEvents.length) {
     state.selectedIndex = state.visibleEvents.length ? state.visibleEvents.length - 1 : null;
+  }
   renderTimeline();
   renderDetailNav();
 }
@@ -325,7 +343,7 @@ function applyFiltersAndRender() {
 function clearTimeline() { timelineTrack.innerHTML = ''; timelineAxis.innerHTML = ''; }
 function renderTimelineSkeleton() {
   clearTimeline();
-  timelineEmpty.hidden    = true;
+  timelineEmpty.hidden = true;
   timelineTrack.innerHTML = '<div class="skeleton" style="height:14px;width:200px;margin:20px auto"></div>';
 }
 
@@ -347,23 +365,23 @@ function renderTimeline() {
     const isDev    = ctx === 'development' || ctx === 'test';
     const node = document.createElement('div');
     node.className = ['timeline-event', `timeline-event--${isManual ? 'manual' : 'auto'}`, isDev ? `timeline-event--${ctx}` : ''].filter(Boolean).join(' ');
-    node.style.left    = `${leftPx}px`;
+    node.style.left = `${leftPx}px`;
     node.dataset.index = i;
-    node.tabIndex      = 0;
+    node.tabIndex = 0;
     const dot = document.createElement('div');
     dot.className = `timeline-event__dot timeline-event__dot--${ev.event_kind}`;
     if (isDev) {
       const label = document.createElement('span');
-      label.className   = `timeline-event__ctx-label timeline-event__ctx-label--${ctx}`;
+      label.className = `timeline-event__ctx-label timeline-event__ctx-label--${ctx}`;
       label.textContent = ctx === 'development' ? 'dev' : 'test';
       node.appendChild(label);
     }
     const connector = document.createElement('div');
     connector.className = 'timeline-event__connector';
     if (isManual) { node.appendChild(dot); node.appendChild(connector); }
-    else          { node.appendChild(connector); node.appendChild(dot); }
+    else { node.appendChild(connector); node.appendChild(dot); }
     if (i === state.selectedIndex) node.classList.add('selected');
-    node.addEventListener('click',   () => selectEvent(i));
+    node.addEventListener('click', () => selectEvent(i));
     node.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') selectEvent(i); });
     timelineTrack.appendChild(node);
   });
@@ -372,14 +390,14 @@ function renderTimeline() {
 
 function buildAxisTicks(tMin, tMax, wrapW) {
   const intervals = [60e3, 5*60e3, 15*60e3, 60*60e3, 6*3600e3, 86400e3, 7*86400e3, 30*86400e3];
-  const range     = tMax - tMin;
-  const interval  = intervals.find(iv => Math.floor(range / iv) <= 8) ?? intervals.at(-1);
+  const range = tMax - tMin;
+  const interval = intervals.find(iv => Math.floor(range / iv) <= 8) ?? intervals.at(-1);
   const firstTick = Math.ceil(tMin / interval) * interval;
   for (let t = firstTick; t <= tMax; t += interval) {
     const leftPx = TIMELINE_PADDING + ((t - tMin) / (tMax - tMin || 1)) * wrapW;
     const tick = document.createElement('div');
-    tick.className   = 'timeline-axis__tick';
-    tick.style.left  = `${leftPx}px`;
+    tick.className = 'timeline-axis__tick';
+    tick.style.left = `${leftPx}px`;
     tick.textContent = formatAxisTick(t, range);
     timelineAxis.appendChild(tick);
   }
@@ -387,8 +405,8 @@ function buildAxisTicks(tMin, tMax, wrapW) {
 
 function formatAxisTick(ts, range) {
   const d = new Date(ts);
-  if (range < 2 * 3600e3)  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (range < 48 * 3600e3) return d.toLocaleString([],    { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (range < 2 * 3600e3) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (range < 48 * 3600e3) return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' });
 }
 
@@ -407,9 +425,9 @@ function renderDetailNav() {
   state.visibleEvents.forEach((ev, i) => {
     const ctx = ev.context ?? 'production';
     const opt = document.createElement('option');
-    opt.value       = i;
+    opt.value = i;
     opt.textContent = [formatTime(ev.created_at), '•', ev.event_kind, ctx !== 'production' ? `[${ctx}]` : '', ev.summary ? '— ' + ev.summary.slice(0, 55) : ''].filter(Boolean).join('  ');
-    opt.selected    = i === state.selectedIndex;
+    opt.selected = i === state.selectedIndex;
     eventNavSelect.appendChild(opt);
   });
   navPrev.disabled = state.selectedIndex === null || state.selectedIndex === 0;
@@ -420,34 +438,36 @@ function renderDetailCard() {
   const ev = state.visibleEvents[state.selectedIndex];
   if (!ev) return showDetailEmpty();
   detailEmpty.hidden = true;
-  detailCard.hidden  = false;
+  detailCard.hidden = false;
   const isManual = ev.is_manual === true;
-  const ctx      = ev.context ?? 'production';
+  const ctx = ev.context ?? 'production';
   cardKind.textContent = ev.event_kind;
-  cardKind.className   = `detail-card__kind detail-card__kind--${ev.event_kind}`;
+  cardKind.className = `detail-card__kind detail-card__kind--${ev.event_kind}`;
   cardSourceBadge.textContent = isManual ? '✏ Manual' : '⚙ Automatic';
-  cardSourceBadge.className   = `detail-card__source-badge${isManual ? ' detail-card__source-badge--manual' : ''}`;
+  cardSourceBadge.className = `detail-card__source-badge${isManual ? ' detail-card__source-badge--manual' : ''}`;
   if (ctx !== 'production') {
     cardContextBadge.textContent = ctx === 'development' ? '🛠 dev' : '🧪 test';
-    cardContextBadge.className   = `detail-card__context-badge detail-card__context-badge--${ctx}`;
+    cardContextBadge.className = `detail-card__context-badge detail-card__context-badge--${ctx}`;
     cardContextBadge.hidden = false;
-  } else { cardContextBadge.hidden = true; }
-  cardTime.textContent    = formatTime(ev.created_at);
+  } else {
+    cardContextBadge.hidden = true;
+  }
+  cardTime.textContent = formatTime(ev.created_at);
   cardSummary.textContent = ev.summary || `${capitalise(ev.event_kind)} on ${ev.source_type}`;
   cardMeta.innerHTML = [
-    ev.author      ? `<span>✏ <strong>${escHtml(ev.author)}</strong></span>` : '',
+    ev.author ? `<span>✏ <strong>${escHtml(ev.author)}</strong></span>` : '',
     ev.source_type ? `<span>Table: <strong>${escHtml(ev.source_type)}</strong></span>` : '',
-    ev.status      ? `<span>Status: <strong>${escHtml(ev.status)}</strong></span>` : '',
+    ev.status ? `<span>Status: <strong>${escHtml(ev.status)}</strong></span>` : '',
   ].filter(Boolean).join('');
   cardBody.textContent = ev.narrative || ev.notes || '';
   renderCardActions(ev);
   renderLinkedAnnotations(ev);
   if (ev.payload) {
-    cardPayloadWrap.hidden  = false;
+    cardPayloadWrap.hidden = false;
     cardPayload.textContent = JSON.stringify(ev.payload, null, 2);
   } else {
     cardPayloadWrap.hidden = true;
-    cardPayload.hidden     = true;
+    cardPayload.hidden = true;
   }
 }
 
@@ -455,12 +475,16 @@ function renderCardActions(ev) {
   cardActions.innerHTML = '';
   if (ev.is_manual === true) {
     const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'nav-btn'; btn.textContent = '✏ Edit annotation';
+    btn.type = 'button';
+    btn.className = 'nav-btn';
+    btn.textContent = '✏ Edit annotation';
     btn.addEventListener('click', () => openEditDrawer(ev));
     cardActions.appendChild(btn);
   } else {
     const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'nav-btn nav-btn--primary'; btn.textContent = 'Annotate this event';
+    btn.type = 'button';
+    btn.className = 'nav-btn nav-btn--primary';
+    btn.textContent = 'Annotate this event';
     btn.addEventListener('click', () => openAnnotationDrawer(ev));
     cardActions.appendChild(btn);
   }
@@ -469,10 +493,9 @@ function renderCardActions(ev) {
 function renderLinkedAnnotations(ev) {
   linkedList.innerHTML = '';
   if (ev.is_manual === true) { linkedPanel.hidden = true; return; }
-  const linked = state.allEvents.filter(e =>
-    e.is_manual === true && Array.isArray(e.related_event_ids) && e.related_event_ids.includes(ev.id));
+  const linked = state.allEvents.filter(e => e.is_manual === true && Array.isArray(e.related_event_ids) && e.related_event_ids.includes(ev.id));
   if (!linked.length) { linkedPanel.hidden = true; return; }
-  linkedPanel.hidden      = false;
+  linkedPanel.hidden = false;
   linkedCount.textContent = `${linked.length}`;
   linked.forEach(ann => {
     const li = document.createElement('li');
@@ -490,73 +513,87 @@ function renderLinkedAnnotations(ev) {
 
 function openAnnotationDrawer(ev) {
   closeAllDrawers();
-  state.annotationSourceId     = ev.id;
-  annotationDrawer.hidden      = false;
+  state.annotationSourceId = ev.id;
+  annotationDrawer.hidden = false;
   annotationLinked.textContent = `${ev.event_kind} • ${formatTime(ev.created_at)} • ${ev.summary || ev.source_type || 'automatic event'}`;
-  annotationKind.value         = 'adaptation';
-  annotationContext.value      = ev.context ?? 'production';
-  annotationSummary.value      = '';
-  annotationNarrative.value    = '';
-  annotationStatus.hidden      = true;
+  annotationKind.value = 'adaptation';
+  annotationContext.value = ev.context ?? 'production';
+  annotationSummary.value = '';
+  annotationNarrative.value = '';
+  annotationStatus.hidden = true;
   annotationStatus.textContent = '';
   annotationSummary.focus();
 }
 
 function closeAnnotationDrawer() {
   state.annotationSourceId = null;
-  annotationDrawer.hidden  = true;
-  annotationStatus.hidden  = true;
+  annotationDrawer.hidden = true;
+  annotationStatus.hidden = true;
 }
 
 function setupAnnotationForm() {
   annotationCancel.addEventListener('click', closeAnnotationDrawer);
   annotationReset.addEventListener('click', () => {
-    annotationKind.value = 'adaptation'; annotationContext.value = 'production';
-    annotationSummary.value = ''; annotationNarrative.value = ''; annotationStatus.hidden = true;
+    annotationKind.value = 'adaptation';
+    annotationContext.value = 'production';
+    annotationSummary.value = '';
+    annotationNarrative.value = '';
+    annotationStatus.hidden = true;
   });
   annotationForm.addEventListener('submit', async e => {
     e.preventDefault();
     const sourceEvent = state.allEvents.find(ev => ev.id === state.annotationSourceId);
     if (!sourceEvent) return;
-    annotationSubmit.disabled      = true;
-    annotationStatus.hidden        = false;
-    annotationStatus.textContent   = 'Saving…';
+    annotationSubmit.disabled = true;
+    annotationStatus.hidden = false;
+    annotationStatus.textContent = 'Saving…';
     annotationStatus.dataset.state = 'working';
     const row = {
-      project_id: sourceEvent.project_id, event_kind: annotationKind.value,
-      source_type: sourceEvent.source_type || 'other', source_record_id: sourceEvent.source_record_id || null,
-      monitor_event_id: sourceEvent.monitor_event_id || null, status: 'pending', is_manual: true,
-      author: annotationAuthor.value.trim() || null, summary: annotationSummary.value.trim(),
-      narrative: annotationNarrative.value.trim(), notes: `Manual annotation linked to ${sourceEvent.id}`,
-      related_event_ids: [sourceEvent.id], context: annotationContext.value,
+      project_id: sourceEvent.project_id,
+      event_kind: annotationKind.value,
+      source_type: sourceEvent.source_type || 'other',
+      source_record_id: sourceEvent.source_record_id || null,
+      monitor_event_id: sourceEvent.monitor_event_id || null,
+      status: 'pending',
+      is_manual: true,
+      author: annotationAuthor.value.trim() || null,
+      summary: annotationSummary.value.trim(),
+      narrative: annotationNarrative.value.trim(),
+      notes: `Manual annotation linked to ${sourceEvent.id}`,
+      related_event_ids: [sourceEvent.id],
+      context: annotationContext.value,
     };
     const { data, error } = await supabase.from('project_events').insert(row).select('*').single();
     annotationSubmit.disabled = false;
-    if (error) { annotationStatus.textContent = error.message; annotationStatus.dataset.state = 'error'; return; }
+    if (error) {
+      annotationStatus.textContent = error.message;
+      annotationStatus.dataset.state = 'error';
+      return;
+    }
     state.pendingInsertedAnnotationId = data.id;
-    annotationStatus.textContent   = 'Saved. Waiting for live event…';
+    annotationStatus.textContent = 'Saved. Waiting for live event…';
     annotationStatus.dataset.state = 'ok';
   });
 }
 
 function openEditDrawer(ev) {
   closeAllDrawers();
-  state.editingEventId   = ev.id;
-  editDrawer.hidden      = false;
-  editKind.value         = ev.event_kind ?? 'adaptation';
-  editContext.value      = ev.context    ?? 'production';
-  editAuthor.value       = ev.author     ?? '';
-  editSummary.value      = ev.summary    ?? '';
-  editNarrative.value    = ev.narrative  ?? ev.notes ?? '';
-  editStatus.hidden      = true;
+  state.editingEventId = ev.id;
+  editDrawer.hidden = false;
+  editKind.value = ev.event_kind ?? 'adaptation';
+  editContext.value = ev.context ?? 'production';
+  editAuthor.value = ev.author ?? '';
+  editSummary.value = ev.summary ?? '';
+  editNarrative.value = ev.narrative ?? ev.notes ?? '';
+  editStatus.hidden = true;
   editStatus.textContent = '';
   editSummary.focus();
 }
 
 function closeEditDrawer() {
   state.editingEventId = null;
-  editDrawer.hidden    = true;
-  editStatus.hidden    = true;
+  editDrawer.hidden = true;
+  editStatus.hidden = true;
 }
 
 function setupEditForm() {
@@ -568,28 +605,35 @@ function setupEditForm() {
   editForm.addEventListener('submit', async e => {
     e.preventDefault();
     if (!state.editingEventId) return;
-    editSubmit.disabled      = true;
-    editStatus.hidden        = false;
-    editStatus.textContent   = 'Saving…';
+    editSubmit.disabled = true;
+    editStatus.hidden = false;
+    editStatus.textContent = 'Saving…';
     editStatus.dataset.state = 'working';
     const patch = {
-      event_kind: editKind.value, context: editContext.value,
-      author: editAuthor.value.trim() || null, summary: editSummary.value.trim(),
+      event_kind: editKind.value,
+      context: editContext.value,
+      author: editAuthor.value.trim() || null,
+      summary: editSummary.value.trim(),
       narrative: editNarrative.value.trim() || null,
     };
     const { error } = await supabase.from('project_events').update(patch).eq('id', state.editingEventId);
     editSubmit.disabled = false;
-    if (error) { editStatus.textContent = error.message; editStatus.dataset.state = 'error'; return; }
-    editStatus.textContent = 'Saved.'; editStatus.dataset.state = 'ok';
+    if (error) {
+      editStatus.textContent = error.message;
+      editStatus.dataset.state = 'error';
+      return;
+    }
+    editStatus.textContent = 'Saved.';
+    editStatus.dataset.state = 'ok';
     setTimeout(closeEditDrawer, 800);
   });
 }
 
 function openDeleteDialog(ev) {
-  state.pendingDeleteId        = ev.id;
+  state.pendingDeleteId = ev.id;
   deleteDialogDesc.textContent = `Delete "${ev.summary || ev.event_kind}"? This cannot be undone.`;
-  deleteStatus.hidden          = true;
-  deleteStatus.textContent     = '';
+  deleteStatus.hidden = true;
+  deleteStatus.textContent = '';
   deleteDialog.showModal();
 }
 
@@ -597,13 +641,17 @@ function setupDeleteDialog() {
   deleteCancel.addEventListener('click', () => { state.pendingDeleteId = null; deleteDialog.close(); });
   deleteConfirm.addEventListener('click', async () => {
     if (!state.pendingDeleteId) return;
-    deleteConfirm.disabled     = true;
-    deleteStatus.hidden        = false;
-    deleteStatus.textContent   = 'Deleting…';
+    deleteConfirm.disabled = true;
+    deleteStatus.hidden = false;
+    deleteStatus.textContent = 'Deleting…';
     deleteStatus.dataset.state = 'working';
     const { error } = await supabase.from('project_events').delete().eq('id', state.pendingDeleteId);
     deleteConfirm.disabled = false;
-    if (error) { deleteStatus.textContent = error.message; deleteStatus.dataset.state = 'error'; return; }
+    if (error) {
+      deleteStatus.textContent = error.message;
+      deleteStatus.dataset.state = 'error';
+      return;
+    }
     state.pendingDeleteId = null;
     deleteDialog.close();
     closeEditDrawer();
@@ -618,7 +666,7 @@ function setupNavListeners() {
   eventNavSelect.addEventListener('change', () => selectEvent(Number(eventNavSelect.value)));
   payloadToggle.addEventListener('click', () => {
     const open = !cardPayload.hidden;
-    cardPayload.hidden    = open;
+    cardPayload.hidden = open;
     payloadToggle.textContent = open ? 'Show raw payload ▾' : 'Hide raw payload ▴';
   });
 }
@@ -627,10 +675,12 @@ function formatTime(iso) {
   return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 function capitalise(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
-function escHtml(s)     { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 /* ── Boot (must be last — after all const declarations) ───── */
-if (getStoredToken()) {
+const token = getStoredToken();
+if (token) {
+  ensureSupabase(token);
   showApp();
   init();
 } else {
