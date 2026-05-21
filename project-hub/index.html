@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Project Hub — Expectation Timeline</title>
+  <title>Project Hub — Timeline</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -33,25 +33,11 @@
     <div class="filter-bar" role="toolbar" aria-label="Timeline filters">
       <div class="filter-bar__group">
         <span class="filter-bar__group-label">Kind</span>
-        <button class="filter-btn active" data-filter-kind="expectation" aria-pressed="true"><span class="dot dot--expectation"></span> Expectation</button>
-        <button class="filter-btn active" data-filter-kind="deviation" aria-pressed="true"><span class="dot dot--deviation"></span> Deviation</button>
-        <button class="filter-btn active" data-filter-kind="adaptation" aria-pressed="true"><span class="dot dot--adaptation"></span> Adaptation</button>
-        <button class="filter-btn active" data-filter-kind="insert" aria-pressed="true"><span class="dot dot--insert"></span> Insert</button>
+        <button class="filter-btn active" data-filter-kind="milestone" aria-pressed="true"><span class="dot dot--milestone"></span> Milestone</button>
         <button class="filter-btn active" data-filter-kind="update" aria-pressed="true"><span class="dot dot--update"></span> Update</button>
-        <button class="filter-btn active" data-filter-kind="delete" aria-pressed="true"><span class="dot dot--delete"></span> Delete</button>
-      </div>
-      <div class="filter-bar__divider" aria-hidden="true"></div>
-      <div class="filter-bar__group">
-        <span class="filter-bar__group-label">Source</span>
-        <button class="filter-btn active" data-filter-source="automatic" aria-pressed="true"><span aria-hidden="true">⚙</span> Automatic</button>
-        <button class="filter-btn active" data-filter-source="manual" aria-pressed="true"><span aria-hidden="true">✏</span> Manual</button>
-      </div>
-      <div class="filter-bar__divider" aria-hidden="true"></div>
-      <div class="filter-bar__group">
-        <span class="filter-bar__group-label">Context</span>
-        <button class="filter-btn active" data-filter-context="production" aria-pressed="true"><span aria-hidden="true">🟢</span> Production</button>
-        <button class="filter-btn active filter-btn--dev" data-filter-context="development" aria-pressed="true"><span aria-hidden="true">🛠</span> Dev</button>
-        <button class="filter-btn active filter-btn--test" data-filter-context="test" aria-pressed="true"><span aria-hidden="true">🧪</span> Test</button>
+        <button class="filter-btn active" data-filter-kind="decision" aria-pressed="true"><span class="dot dot--decision"></span> Decision</button>
+        <button class="filter-btn active" data-filter-kind="launch" aria-pressed="true"><span class="dot dot--launch"></span> Launch</button>
+        <button class="filter-btn active" data-filter-kind="blocker" aria-pressed="true"><span class="dot dot--blocker"></span> Blocker</button>
       </div>
     </div>
 
@@ -80,7 +66,7 @@
         </div>
         <div class="detail-card__header">
           <span class="detail-card__kind" id="card-kind"></span>
-          <span class="detail-card__source-badge" id="card-source-badge"></span>
+          <span class="detail-card__source-badge" id="card-source-badge" hidden></span>
           <span class="detail-card__context-badge" id="card-context-badge" hidden></span>
           <time class="detail-card__time" id="card-time"></time>
         </div>
@@ -89,30 +75,23 @@
         <div class="detail-card__body" id="card-body"></div>
         <div class="detail-card__actions" id="card-actions"></div>
 
-        <div class="linked-annotations" id="linked-annotations" hidden>
-          <div class="linked-annotations__header">
-            <h3>Linked annotations</h3>
-            <span class="linked-annotations__count" id="linked-annotations-count"></span>
-          </div>
-          <ul class="linked-annotations__list" id="linked-annotations-list"></ul>
-        </div>
+        <div class="linked-annotations" id="linked-annotations" hidden></div>
 
         <div class="annotation-drawer" id="annotation-drawer" hidden>
           <div class="annotation-drawer__header">
-            <h3>Annotate automatic event</h3>
+            <h3>Add event</h3>
             <button class="annotation-drawer__close" id="annotation-cancel" type="button">Cancel</button>
           </div>
           <div class="annotation-drawer__linked" id="annotation-linked"></div>
           <form id="annotation-form" class="annotation-form">
             <label>
-              <span>Kind</span>
+              <span>Type</span>
               <select id="annotation-kind">
-                <option value="adaptation" selected>adaptation</option>
-                <option value="expectation">expectation</option>
-                <option value="deviation">deviation</option>
-                <option value="insert">insert</option>
-                <option value="update">update</option>
-                <option value="delete">delete</option>
+                <option value="milestone">Milestone</option>
+                <option value="update" selected>Update</option>
+                <option value="decision">Decision</option>
+                <option value="launch">Launch</option>
+                <option value="blocker">Blocker</option>
               </select>
             </label>
             <label>
@@ -128,16 +107,16 @@
               <input id="annotation-author" type="text" placeholder="Your name" maxlength="120" />
             </label>
             <label>
-              <span>Summary</span>
-              <input id="annotation-summary" type="text" placeholder="Short summary" maxlength="240" required />
+              <span>Title</span>
+              <input id="annotation-summary" type="text" placeholder="Short event title" maxlength="240" required />
             </label>
             <label class="annotation-form__full">
-              <span>Narrative</span>
-              <textarea id="annotation-narrative" rows="5" placeholder="What does this event mean?" required></textarea>
+              <span>Notes</span>
+              <textarea id="annotation-narrative" rows="5" placeholder="What happened?"></textarea>
             </label>
             <div class="annotation-form__actions">
               <button class="nav-btn" type="button" id="annotation-reset">Reset</button>
-              <button class="nav-btn nav-btn--primary" type="submit" id="annotation-submit">Create annotation</button>
+              <button class="nav-btn nav-btn--primary" type="submit" id="annotation-submit">Save event</button>
             </div>
             <p class="annotation-form__status" id="annotation-status" hidden></p>
           </form>
@@ -145,19 +124,18 @@
 
         <div class="annotation-drawer annotation-drawer--edit" id="edit-drawer" hidden>
           <div class="annotation-drawer__header">
-            <h3>Edit annotation</h3>
+            <h3>Edit event</h3>
             <button class="annotation-drawer__close" id="edit-cancel" type="button">Cancel</button>
           </div>
           <form id="edit-form" class="annotation-form">
             <label>
-              <span>Kind</span>
+              <span>Type</span>
               <select id="edit-kind">
-                <option value="adaptation">adaptation</option>
-                <option value="expectation">expectation</option>
-                <option value="deviation">deviation</option>
-                <option value="insert">insert</option>
-                <option value="update">update</option>
-                <option value="delete">delete</option>
+                <option value="milestone">Milestone</option>
+                <option value="update">Update</option>
+                <option value="decision">Decision</option>
+                <option value="launch">Launch</option>
+                <option value="blocker">Blocker</option>
               </select>
             </label>
             <label>
@@ -173,12 +151,12 @@
               <input id="edit-author" type="text" placeholder="Your name" maxlength="120" />
             </label>
             <label>
-              <span>Summary</span>
-              <input id="edit-summary" type="text" placeholder="Short summary" maxlength="240" required />
+              <span>Title</span>
+              <input id="edit-summary" type="text" placeholder="Short event title" maxlength="240" required />
             </label>
             <label class="annotation-form__full">
-              <span>Narrative</span>
-              <textarea id="edit-narrative" rows="5" placeholder="What does this event mean?"></textarea>
+              <span>Notes</span>
+              <textarea id="edit-narrative" rows="5" placeholder="What happened?"></textarea>
             </label>
             <div class="annotation-form__actions">
               <button class="nav-btn nav-btn--danger" type="button" id="edit-delete">Delete</button>
@@ -197,7 +175,7 @@
 
     <dialog class="delete-dialog" id="delete-dialog">
       <div class="delete-dialog__inner">
-        <h3>Delete annotation?</h3>
+        <h3>Delete event?</h3>
         <p id="delete-dialog-desc">This cannot be undone.</p>
         <div class="delete-dialog__actions">
           <button class="nav-btn" id="delete-cancel">Cancel</button>
