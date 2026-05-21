@@ -8,8 +8,6 @@
 </head>
 <body>
   <div id="app">
-
-    <!-- Header -->
     <header class="hub-header">
       <div class="hub-header__inner">
         <div class="hub-header__title-block">
@@ -27,63 +25,31 @@
       </div>
     </header>
 
-    <!-- Filter Bar -->
     <div class="filter-bar" role="toolbar" aria-label="Timeline filters">
-
-      <!-- Event kind -->
       <div class="filter-bar__group">
         <span class="filter-bar__group-label">Kind</span>
-        <button class="filter-btn active" data-filter-kind="expectation" aria-pressed="true">
-          <span class="dot dot--expectation"></span> Expectation
-        </button>
-        <button class="filter-btn active" data-filter-kind="deviation" aria-pressed="true">
-          <span class="dot dot--deviation"></span> Deviation
-        </button>
-        <button class="filter-btn active" data-filter-kind="adaptation" aria-pressed="true">
-          <span class="dot dot--adaptation"></span> Adaptation
-        </button>
-        <button class="filter-btn active" data-filter-kind="insert" aria-pressed="true">
-          <span class="dot dot--insert"></span> Insert
-        </button>
-        <button class="filter-btn active" data-filter-kind="update" aria-pressed="true">
-          <span class="dot dot--update"></span> Update
-        </button>
-        <button class="filter-btn active" data-filter-kind="delete" aria-pressed="true">
-          <span class="dot dot--delete"></span> Delete
-        </button>
+        <button class="filter-btn active" data-filter-kind="expectation" aria-pressed="true"><span class="dot dot--expectation"></span> Expectation</button>
+        <button class="filter-btn active" data-filter-kind="deviation" aria-pressed="true"><span class="dot dot--deviation"></span> Deviation</button>
+        <button class="filter-btn active" data-filter-kind="adaptation" aria-pressed="true"><span class="dot dot--adaptation"></span> Adaptation</button>
+        <button class="filter-btn active" data-filter-kind="insert" aria-pressed="true"><span class="dot dot--insert"></span> Insert</button>
+        <button class="filter-btn active" data-filter-kind="update" aria-pressed="true"><span class="dot dot--update"></span> Update</button>
+        <button class="filter-btn active" data-filter-kind="delete" aria-pressed="true"><span class="dot dot--delete"></span> Delete</button>
       </div>
-
       <div class="filter-bar__divider" aria-hidden="true"></div>
-
-      <!-- Source -->
       <div class="filter-bar__group">
         <span class="filter-bar__group-label">Source</span>
-        <button class="filter-btn active" data-filter-source="automatic" aria-pressed="true">
-          <span aria-hidden="true">⚙</span> Automatic
-        </button>
-        <button class="filter-btn active" data-filter-source="manual" aria-pressed="true">
-          <span aria-hidden="true">✏</span> Manual
-        </button>
+        <button class="filter-btn active" data-filter-source="automatic" aria-pressed="true"><span aria-hidden="true">⚙</span> Automatic</button>
+        <button class="filter-btn active" data-filter-source="manual" aria-pressed="true"><span aria-hidden="true">✏</span> Manual</button>
       </div>
-
       <div class="filter-bar__divider" aria-hidden="true"></div>
-
-      <!-- Context -->
       <div class="filter-bar__group">
         <span class="filter-bar__group-label">Context</span>
-        <button class="filter-btn active" data-filter-context="production" aria-pressed="true">
-          <span aria-hidden="true">🟢</span> Production
-        </button>
-        <button class="filter-btn active filter-btn--dev" data-filter-context="development" aria-pressed="true">
-          <span aria-hidden="true">🛠</span> Dev
-        </button>
-        <button class="filter-btn active filter-btn--test" data-filter-context="test" aria-pressed="true">
-          <span aria-hidden="true">🧪</span> Test
-        </button>
+        <button class="filter-btn active" data-filter-context="production" aria-pressed="true"><span aria-hidden="true">🟢</span> Production</button>
+        <button class="filter-btn active filter-btn--dev" data-filter-context="development" aria-pressed="true"><span aria-hidden="true">🛠</span> Dev</button>
+        <button class="filter-btn active filter-btn--test" data-filter-context="test" aria-pressed="true"><span aria-hidden="true">🧪</span> Test</button>
       </div>
     </div>
 
-    <!-- Timeline Canvas -->
     <main class="timeline-section">
       <div class="timeline-wrapper" id="timeline-wrapper">
         <div class="timeline-axis" id="timeline-axis"></div>
@@ -94,7 +60,6 @@
       </div>
     </main>
 
-    <!-- Detail Card -->
     <aside class="detail-panel" id="detail-panel" aria-live="polite">
       <div class="detail-panel__empty" id="detail-empty">
         <p>Select an event on the timeline to see details.</p>
@@ -117,13 +82,58 @@
         <h2 class="detail-card__summary" id="card-summary"></h2>
         <div class="detail-card__meta" id="card-meta"></div>
         <div class="detail-card__body" id="card-body"></div>
+        <div class="detail-card__actions" id="card-actions"></div>
+        <div class="annotation-drawer" id="annotation-drawer" hidden>
+          <div class="annotation-drawer__header">
+            <h3>Annotate automatic event</h3>
+            <button class="annotation-drawer__close" id="annotation-cancel" type="button">Cancel</button>
+          </div>
+          <div class="annotation-drawer__linked" id="annotation-linked"></div>
+          <form id="annotation-form" class="annotation-form">
+            <label>
+              <span>Kind</span>
+              <select id="annotation-kind">
+                <option value="adaptation" selected>adaptation</option>
+                <option value="expectation">expectation</option>
+                <option value="deviation">deviation</option>
+                <option value="insert">insert</option>
+                <option value="update">update</option>
+                <option value="delete">delete</option>
+              </select>
+            </label>
+            <label>
+              <span>Context</span>
+              <select id="annotation-context">
+                <option value="production" selected>production</option>
+                <option value="development">development</option>
+                <option value="test">test</option>
+              </select>
+            </label>
+            <label>
+              <span>Author</span>
+              <input id="annotation-author" type="text" placeholder="Your name" maxlength="120" />
+            </label>
+            <label>
+              <span>Summary</span>
+              <input id="annotation-summary" type="text" placeholder="Short summary" maxlength="240" required />
+            </label>
+            <label class="annotation-form__full">
+              <span>Narrative</span>
+              <textarea id="annotation-narrative" rows="5" placeholder="What does this event mean?" required></textarea>
+            </label>
+            <div class="annotation-form__actions">
+              <button class="nav-btn" type="button" id="annotation-reset">Reset</button>
+              <button class="nav-btn nav-btn--primary" type="submit" id="annotation-submit">Create annotation</button>
+            </div>
+            <p class="annotation-form__status" id="annotation-status" hidden></p>
+          </form>
+        </div>
         <div class="detail-card__payload" id="card-payload-wrapper" hidden>
           <button class="payload-toggle" id="payload-toggle">Show raw payload ▾</button>
           <pre class="detail-card__payload-pre" id="card-payload" hidden></pre>
         </div>
       </div>
     </aside>
-
   </div>
   <script type="module" src="app.js"></script>
 </body>
