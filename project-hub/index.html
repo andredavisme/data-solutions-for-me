@@ -9,28 +9,10 @@
 </head>
 <body>
 
-  <!-- Password gate overlay -->
-  <div class="auth-gate" id="auth-gate" hidden>
-    <div class="auth-gate__card">
-      <h1 class="auth-gate__title">Project Hub</h1>
-      <p class="auth-gate__sub">Enter the passphrase to continue.</p>
-      <form id="auth-gate-form" class="auth-gate__form">
-        <input
-          id="auth-gate-input"
-          type="password"
-          class="auth-gate__input"
-          placeholder="Passphrase"
-          autocomplete="current-password"
-          required
-          autofocus
-        />
-        <button class="auth-gate__btn" type="submit" id="auth-gate-submit">Enter</button>
-      </form>
-      <p class="auth-gate__error" id="auth-gate-error" hidden></p>
-    </div>
-  </div>
+  <!-- auth-gate placeholder (disabled) -->
+  <div id="auth-gate" hidden></div>
 
-  <div id="app" hidden>
+  <div id="app">
     <header class="hub-header">
       <div class="hub-header__inner">
         <div class="hub-header__title-block">
@@ -44,7 +26,6 @@
             <label for="project-select" class="sr-only">Select project</label>
             <select id="project-select"></select>
           </div>
-          <button class="nav-btn auth-gate__signout" id="auth-signout" title="Sign out">🔒 Lock</button>
         </div>
       </div>
     </header>
