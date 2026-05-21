@@ -66,7 +66,7 @@ Selecting an **automatic** event reveals two things in the detail card:
 
 Selecting a **manual** event reveals:
 
-1. **✏ Edit annotation** button — opens an edit drawer pre-filled with the event’s current values. Fields: kind, context, author, summary, narrative.
+1. **✏ Edit annotation** button — opens an edit drawer pre-filled with the event's current values. Fields: kind, context, author, summary, narrative.
 2. **Delete** button inside the edit drawer — opens a confirmation dialog before permanently removing the event.
 
 All mutations (create, update, delete) propagate back to the timeline instantly via Realtime.
@@ -74,6 +74,20 @@ All mutations (create, update, delete) propagate back to the timeline instantly 
 ### Single-project hub, portfolio-ready
 
 All events are scoped by `project_id`. A future aggregator hub can query across multiple project IDs for portfolio timelines, deviation heatmaps, and adaptation-lag metrics.
+
+---
+
+## Authentication
+
+> ⚠️ **Auth gate temporarily disabled** (as of 2026-05-21). The passphrase login screen has been removed while a JWT secret configuration issue is resolved. The app loads directly using the Supabase anon key.
+
+### To re-enable auth
+
+1. Go to Supabase dashboard → **Project Settings → Data API** and copy the **JWT Secret**.
+2. Go to **Edge Functions → verify-passphrase → Secrets** and set `HUB_JWT_SECRET` to that value.
+3. Restore `app.js` to pass `Authorization: Bearer <token>` and restore the auth gate in `index.html`.
+
+The `verify-passphrase` Edge Function and all auth scaffolding remain deployed and intact — only the UI gate is bypassed.
 
 ---
 
@@ -198,6 +212,13 @@ The hub is deployed via GitHub Actions to GitHub Pages on every push to `main`.
 - [x] **Delete** button in edit drawer — opens a native `<dialog>` confirmation modal before issuing `DELETE`.
 - [x] Realtime DELETE removes the event from the timeline and resets selection gracefully.
 - [x] GitHub Pages deployment via Actions workflow; live at [https://andredavisme.github.io/data-solutions-for-me/project-hub/](https://andredavisme.github.io/data-solutions-for-me/project-hub/).
+
+### Phase 4.5: Auth gate ⚠️ In progress
+
+- [x] `verify-passphrase` Edge Function deployed — accepts a passphrase, returns a signed JWT.
+- [x] Auth gate UI built (passphrase input, token stored in localStorage, auto-expiry check).
+- [ ] **Blocked**: `HUB_JWT_SECRET` in Edge Function must be set to the Supabase project JWT secret so PostgREST can verify tokens. See [Authentication](#authentication) section above.
+- [ ] Auth gate UI temporarily disabled — app loads directly with anon key until secret is configured.
 
 ### Phase 5: Aggregator-ready patterns
 
