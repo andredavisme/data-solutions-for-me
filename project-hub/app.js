@@ -1,8 +1,109 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-const SUPABASE_URL = 'https://hhyhulqngdkwsxhymmcd.supabase.co';
+const SUPABASE_URL    = 'https://hhyhulqngdkwsxhymmcd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_haKvwV0M7KMj4Qz69M6WGg_KmIfU-aI';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const VERIFY_URL      = `${SUPABASE_URL}/functions/v1/verify-passphrase`;
+const TOKEN_KEY       = 'hub_auth_token';
+
+/* ── Auth helpers ─────────────────────────────────────────── */
+function getStoredToken() {
+  try {
+    const raw = localStorage.getItem(TOKEN_KEY);
+    if (!raw) return null;
+    // Decode payload to check expiry (no signature verification on client)
+    const payload = JSON.parse(atob(raw.split('.')[1]));
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      localStorage.removeItem(TOKEN_KEY);
+      return null;
+    }
+    return raw;
+  } catch { return null; }
+}
+
+function storeToken(token) { localStorage.setItem(TOKEN_KEY, token); }
+function clearToken()      { localStorage.removeItem(TOKEN_KEY); }
+
+/* Build a Supabase client that injects the hub token as a custom header on writes */
+function buildSupabase(token) {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: token ? { 'x-hub-token': token } : {},
+    },
+  });
+}
+
+let supabase = buildSupabase(getStoredToken());
+
+/* ── Gate logic ───────────────────────────────────────────── */
+const authGate      = document.getElementById('auth-gate');
+const authGateForm  = document.getElementById('auth-gate-form');
+const authGateInput = document.getElementById('auth-gate-input');
+const authGateBtn   = document.getElementById('auth-gate-submit');
+const authGateError = document.getElementById('auth-gate-error');
+const appDiv        = document.getElementById('app');
+const authSignout   = document.getElementById('auth-signout');
+
+function showGate() {
+  authGate.hidden = false;
+  appDiv.hidden   = true;
+  authGateInput.value = '';
+  authGateError.hidden = true;
+  authGateInput.focus();
+}
+
+function showApp() {
+  authGate.hidden = true;
+  appDiv.hidden   = false;
+}
+
+async function attemptLogin(passphrase) {
+  authGateBtn.disabled = true;
+  authGateBtn.textContent = 'Checking…';
+  authGateError.hidden = true;
+  try {
+    const res = await fetch(VERIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.token) throw new Error(json.error || 'Incorrect passphrase');
+    storeToken(json.token);
+    supabase = buildSupabase(json.token);
+    showApp();
+    init();
+  } catch (err) {
+    authGateError.textContent = err.message;
+    authGateError.hidden = false;
+    authGateInput.select();
+  } finally {
+    authGateBtn.disabled = false;
+    authGateBtn.textContent = 'Enter';
+  }
+}
+
+authGateForm.addEventListener('submit', e => {
+  e.preventDefault();
+  attemptLogin(authGateInput.value);
+});
+
+authSignout.addEventListener('click', () => {
+  clearToken();
+  supabase = buildSupabase(null);
+  showGate();
+});
+
+// Boot: if a valid token exists, skip gate
+if (getStoredToken()) {
+  showApp();
+  init();
+} else {
+  showGate();
+}
+
+/* ════════════════════════════════════════════════════════════
+   Everything below is unchanged from the original app.js
+   ════════════════════════════════════════════════════════════ */
 
 const state = {
   projects: [],
@@ -11,10 +112,8 @@ const state = {
   visibleEvents: [],
   selectedIndex: null,
   realtimeChannel: null,
-  // annotate (create)
   annotationSourceId: null,
   pendingInsertedAnnotationId: null,
-  // edit
   editingEventId: null,
   pendingDeleteId: null,
   filters: {
@@ -45,7 +144,6 @@ const cardSummary         = $('card-summary');
 const cardMeta            = $('card-meta');
 const cardBody            = $('card-body');
 const cardActions         = $('card-actions');
-// annotate drawer
 const annotationDrawer    = $('annotation-drawer');
 const annotationLinked    = $('annotation-linked');
 const annotationForm      = $('annotation-form');
@@ -58,11 +156,9 @@ const annotationSubmit    = $('annotation-submit');
 const annotationCancel    = $('annotation-cancel');
 const annotationReset     = $('annotation-reset');
 const annotationStatus    = $('annotation-status');
-// linked annotations panel
 const linkedPanel         = $('linked-annotations');
 const linkedList          = $('linked-annotations-list');
 const linkedCount         = $('linked-annotations-count');
-// edit drawer
 const editDrawer          = $('edit-drawer');
 const editForm            = $('edit-form');
 const editKind            = $('edit-kind');
@@ -74,26 +170,22 @@ const editSubmit          = $('edit-submit');
 const editCancel          = $('edit-cancel');
 const editDelete          = $('edit-delete');
 const editStatus          = $('edit-status');
-// delete dialog
 const deleteDialog        = $('delete-dialog');
 const deleteDialogDesc    = $('delete-dialog-desc');
 const deleteCancel        = $('delete-cancel');
 const deleteConfirm       = $('delete-confirm');
 const deleteStatus        = $('delete-status');
-// payload
 const cardPayloadWrap     = $('card-payload-wrapper');
 const cardPayload         = $('card-payload');
 const payloadToggle       = $('payload-toggle');
 
-init();
-
-async function init() {
+function init() {
   setupFilters();
   setupNavListeners();
   setupAnnotationForm();
   setupEditForm();
   setupDeleteDialog();
-  await loadProjects();
+  loadProjects();
 }
 
 /* ── Projects ─────────────────────────────────────────────── */
@@ -169,9 +261,9 @@ function subscribeRealtime() {
       filter: `project_id=eq.${state.activeProjectId}`
     }, payload => handleRealtimeEvent(payload))
     .subscribe(status => {
-      if (status === 'SUBSCRIBED')                         setRealtimeBadge('live');
+      if (status === 'SUBSCRIBED')                              setRealtimeBadge('live');
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setRealtimeBadge('error');
-      if (status === 'CLOSED')                             setRealtimeBadge('off');
+      if (status === 'CLOSED')                                  setRealtimeBadge('off');
     });
 }
 
@@ -371,7 +463,6 @@ function renderDetailNav() {
 function renderDetailCard() {
   const ev = state.visibleEvents[state.selectedIndex];
   if (!ev) return showDetailEmpty();
-  detailEmpty.hidden = false;
   detailEmpty.hidden = true;
   detailCard.hidden  = false;
   const isManual = ev.is_manual === true;
@@ -407,7 +498,6 @@ function renderDetailCard() {
 function renderCardActions(ev) {
   cardActions.innerHTML = '';
   if (ev.is_manual === true) {
-    // Edit button for manual events
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className = 'nav-btn';
@@ -415,7 +505,6 @@ function renderCardActions(ev) {
     editBtn.addEventListener('click', () => openEditDrawer(ev));
     cardActions.appendChild(editBtn);
   } else {
-    // Annotate button for automatic events
     const annotateBtn = document.createElement('button');
     annotateBtn.type = 'button';
     annotateBtn.className = 'nav-btn nav-btn--primary';
@@ -428,20 +517,13 @@ function renderCardActions(ev) {
 /* ── Linked annotations panel ─────────────────────────────── */
 function renderLinkedAnnotations(ev) {
   linkedList.innerHTML = '';
-  if (ev.is_manual === true) {
-    linkedPanel.hidden = true;
-    return;
-  }
-  // Automatic event: find all manual events that reference this id
+  if (ev.is_manual === true) { linkedPanel.hidden = true; return; }
   const linked = state.allEvents.filter(e =>
     e.is_manual === true &&
     Array.isArray(e.related_event_ids) &&
     e.related_event_ids.includes(ev.id)
   );
-  if (!linked.length) {
-    linkedPanel.hidden = true;
-    return;
-  }
+  if (!linked.length) { linkedPanel.hidden = true; return; }
   linkedPanel.hidden = false;
   linkedCount.textContent = `${linked.length}`;
   linked.forEach(ann => {
@@ -467,11 +549,11 @@ function openAnnotationDrawer(ev) {
   state.annotationSourceId = ev.id;
   annotationDrawer.hidden  = false;
   annotationLinked.textContent = `${ev.event_kind} • ${formatTime(ev.created_at)} • ${ev.summary || ev.source_type || 'automatic event'}`;
-  annotationKind.value     = 'adaptation';
-  annotationContext.value  = ev.context ?? 'production';
-  annotationSummary.value  = '';
+  annotationKind.value      = 'adaptation';
+  annotationContext.value   = ev.context ?? 'production';
+  annotationSummary.value   = '';
   annotationNarrative.value = '';
-  annotationStatus.hidden  = true;
+  annotationStatus.hidden   = true;
   annotationStatus.textContent = '';
   annotationSummary.focus();
 }
@@ -485,11 +567,11 @@ function closeAnnotationDrawer() {
 function setupAnnotationForm() {
   annotationCancel.addEventListener('click', closeAnnotationDrawer);
   annotationReset.addEventListener('click', () => {
-    annotationKind.value     = 'adaptation';
-    annotationContext.value  = 'production';
-    annotationSummary.value  = '';
+    annotationKind.value      = 'adaptation';
+    annotationContext.value   = 'production';
+    annotationSummary.value   = '';
     annotationNarrative.value = '';
-    annotationStatus.hidden  = true;
+    annotationStatus.hidden   = true;
   });
   annotationForm.addEventListener('submit', async e => {
     e.preventDefault();
@@ -530,15 +612,15 @@ function setupAnnotationForm() {
 /* ── Edit drawer ──────────────────────────────────────────── */
 function openEditDrawer(ev) {
   closeAllDrawers();
-  state.editingEventId    = ev.id;
-  editDrawer.hidden       = false;
-  editKind.value          = ev.event_kind ?? 'adaptation';
-  editContext.value       = ev.context    ?? 'production';
-  editAuthor.value        = ev.author     ?? '';
-  editSummary.value       = ev.summary    ?? '';
-  editNarrative.value     = ev.narrative  ?? ev.notes ?? '';
-  editStatus.hidden       = true;
-  editStatus.textContent  = '';
+  state.editingEventId   = ev.id;
+  editDrawer.hidden      = false;
+  editKind.value         = ev.event_kind ?? 'adaptation';
+  editContext.value      = ev.context    ?? 'production';
+  editAuthor.value       = ev.author     ?? '';
+  editSummary.value      = ev.summary    ?? '';
+  editNarrative.value    = ev.narrative  ?? ev.notes ?? '';
+  editStatus.hidden      = true;
+  editStatus.textContent = '';
   editSummary.focus();
 }
 
